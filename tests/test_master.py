@@ -125,6 +125,97 @@ class SourceRuleTests(unittest.TestCase):
         self.assertEqual(o.to_record(us, "US", "x", "Joe's Plumbing", "plumbing", None, None, None,
                                      None, "", "Austin", "TX", "78701")["can_email"], "can email")
 
+    def test_companies_house_psc(self):
+        import json
+        from recon.sources import companies_house_psc as psc
+
+        def line(number, **data):
+            return json.dumps({"company_number": number, "data": data})
+        lines = [
+            line("123456", kind="individual-person-with-significant-control", name="Mrs Jane Smith",
+                 name_elements={"title": "Mrs", "forename": "Jane", "surname": "Smith"},
+                 natures_of_control=["ownership-of-shares-75-to-100-percent"]),
+            line("00999999", kind="corporate-entity-person-with-significant-control",
+                 name="Acme Holdings Ltd", natures_of_control=["voting-rights-25-to-50-percent"]),
+            line("00123456", kind="corporate-entity-person-with-significant-control",
+                 name="Acme Holdings Ltd", natures_of_control=["significant-influence-or-control"]),
+            line("00123456", kind="individual-person-with-significant-control", name="Mr Old Owner",
+                 ceased_on="2020-01-01", natures_of_control=["ownership-of-shares-25-to-50-percent"]),
+            line("00555555", kind="persons-with-significant-control-statement",
+                 statement="no-individual-or-entity-with-signficant-control"),
+            json.dumps({"data": {"kind": "totals#persons-of-significant-control-snapshot"}}),
+        ]
+        found = list(psc.companies(psc.sorted_pairs(psc.owners(lines), tempfile.gettempdir())))
+        self.assertEqual([r["company_number"] for r in found], ["00123456", "00999999"])
+        self.assertEqual(found[0]["people"], "Acme Holdings Ltd (corporate owner, significant influence); "
+                                             "Jane Smith (owner, 75%+ shares)")
+        self.assertEqual(found[1]["people"], "Acme Holdings Ltd (corporate owner, 25-50% votes)")
+        self.assertEqual((found[0]["can_email"], found[0]["kind"]), ("can email", "company"))
+        with tempfile.TemporaryDirectory() as folder:  # Sorting on disk gives the same answer.
+            pairs = list(psc.sorted_pairs(psc.owners(lines), folder, chunk=1))
+            self.assertEqual(os.listdir(folder), [])
+        self.assertEqual(pairs, sorted(psc.owners(lines)))
+
+    def test_companies_house_accounts(self):
+        from recon.sources import companies_house_accounts as accounts
+        document = """<html><body>
+        <ix:nonNumeric name="bus:EntityCurrentLegalOrRegisteredName" contextRef="c1">Glow Room
+          <span>Ltd</span></ix:nonNumeric>
+        <ix:nonFraction name="core:AverageNumberEmployeesDuringPeriod" contextRef="c1" decimals="0"
+          unitRef="pure">12</ix:nonFraction>
+        <ix:nonFraction name="core:AverageNumberEmployeesDuringPeriod" contextRef="c0" decimals="0"
+          unitRef="pure">9</ix:nonFraction>
+        <ix:nonFraction name="core:TurnoverRevenue" contextRef="c1" scale="3" unitRef="GBP">1,234</ix:nonFraction>
+        <ix:nonNumeric name="bus:NameEntityOfficer" contextRef="d1">JANE SMITH</ix:nonNumeric>
+        <ix:nonNumeric name="bus:NameEntityOfficer" contextRef="d2">Bob Jones</ix:nonNumeric>
+        <ix:nonNumeric name="core:DirectorSigningFinancialStatements" contextRef="d1"/>
+        <xbrli:context id="c1"><xbrli:period><xbrli:startDate>2025-01-01</xbrli:startDate>
+          <xbrli:endDate>2025-12-31</xbrli:endDate></xbrli:period></xbrli:context>
+        <xbrli:context id="c0"><xbrli:period><xbrli:endDate>2024-12-31</xbrli:endDate></xbrli:period>
+          </xbrli:context>
+        <xbrli:context id="d1"><xbrli:entity><xbrli:segment>Director1</xbrli:segment></xbrli:entity>
+          <xbrli:period><xbrli:endDate>2025-12-31</xbrli:endDate></xbrli:period></xbrli:context>
+        </body></html>"""
+        name, staff, turnover, director = accounts.summary(document)
+        self.assertEqual((name, staff, turnover, director), ("Glow Room Ltd", 12, 1_234_000, "Jane Smith"))
+        r = accounts.to_record("123456", name, staff, turnover, director, "20251231")
+        self.assertEqual((r["company_number"], r["category"], r["people"], r["can_email"]),
+                         ("00123456", "about 12 staff; turnover £1.2m",
+                          "Jane Smith (director who signed the accounts)", "can email"))
+
+    def test_sec_form_d(self):
+        from datetime import date
+        from recon.sources import sec_form_d
+        issuer = {"CIK": "0001234", "ENTITYNAME": "Acme Robotics Inc", "STREET1": "2 Main St",
+                  "CITY": "Austin", "STATEORCOUNTRY": "TX", "ZIPCODE": "78701",
+                  "ISSUERPHONENUMBER": "5125550101", "ENTITYTYPE": "Corporation"}
+        person = sec_form_d.person({"FIRSTNAME": "JANE", "LASTNAME": "SMITH",
+                                    "RELATIONSHIP_1": "Executive Officer", "RELATIONSHIP_2": "Director"})
+        r = sec_form_d.to_record(issuer, date(2026, 6, 20), {"INDUSTRYGROUPTYPE": "Other Technology",
+                                                             "REVENUERANGE": "Decline to Disclose"}, [person])
+        self.assertEqual((r["source_id"], r["people"], r["category"], r["phones"], r["can_email"]),
+                         ("1234", "Jane Smith (Executive Officer, Director)",
+                          "Other Technology; revenue Decline to Disclose", "(512) 555-0101", "can email"))
+        self.assertIsNone(sec_form_d.to_record({**issuer, "STATEORCOUNTRY": "X0"}))
+        self.assertEqual(sec_form_d.recent_quarters(date(2026, 1, 5), 3), ["2025q4", "2025q3", "2025q2"])
+
+    def test_sba_ppp(self):
+        from recon.sources import sba_ppp
+        base = {"LoanNumber": "9547507704", "BorrowerName": "SUMTER COATINGS, INC.",
+                "BorrowerAddress": "2410 Highway 15 South", "BorrowerCity": "SUMTER", "BorrowerState": "SC",
+                "BorrowerZip": "29150-9662", "LoanStatus": "Paid in Full", "JobsReported": "12",
+                "NAICSCode": "325510", "BusinessType": "Corporation", "NonProfit": ""}
+        r = sba_ppp.to_record(base)
+        self.assertEqual((r["kind"], r["category"], r["postcode"], r["can_email"]),
+                         ("business", "12 jobs reported (PPP 2020-21); NAICS 325510; Corporation",
+                          "29150", "can email"))
+        sole = sba_ppp.to_record({**base, "BusinessType": "Sole Proprietorship"})
+        self.assertEqual((sole["kind"], sole["can_email"], sole["rule_reason"]),
+                         ("sole trader", "post only", "individual: post only"))
+        self.assertEqual(sba_ppp.borrower_key(base),
+                         sba_ppp.borrower_key({**base, "BorrowerZip": "29150", "BorrowerName": "Sumter  Coatings, Inc."}))
+        self.assertTrue(sba_ppp.WITHHELD.match("Exemption 6"))
+
     def test_every_loader_describes_its_source(self):
         for name, loader in sources.registry().items():
             for key in ("name", "title", "country", "url", "licence"):

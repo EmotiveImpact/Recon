@@ -14,6 +14,7 @@ addresses (Gmail, Hotmail and so on) are kept, and the reason column says so.
 """
 
 import os
+import time
 import types
 
 from .. import contacts, overture, text
@@ -43,7 +44,7 @@ def _extract(country, cache):
     socials = "socials" if "socials" in columns else "NULL::VARCHAR[]"
     still_open = ("AND coalesce(operating_status, '') <> 'permanently_closed'"
                   if "operating_status" in columns else "")
-    db.execute(
+    query = (
         f"""COPY (SELECT id, names.primary AS name, {primary} AS category, websites, phones,
                          {emails} AS emails, {socials} AS socials,
                          addresses[1].freeform AS street, addresses[1].locality AS town,
@@ -53,6 +54,14 @@ def _extract(country, cache):
                     AND addresses[1].country = '{country}' AND confidence >= 0.5 {still_open}
                     AND names.primary IS NOT NULL)
             TO '{path}.part' (FORMAT parquet, COMPRESSION zstd)""")
+    for attempt in range(4):  # The bucket sometimes answers 502; try again.
+        try:
+            db.execute(query)
+            break
+        except Exception:  # duckdb.HTTPException, without importing duckdb here.
+            if attempt == 3:
+                raise
+            time.sleep(30 * (attempt + 1))
     os.replace(path + ".part", path)
     return path
 
