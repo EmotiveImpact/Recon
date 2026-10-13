@@ -187,67 +187,119 @@ _ORGANISATION_COLUMNS = ("name, kind, category, legal_form, address, town, regio
                         "website, emails, phones, socials, people, can_email")
 
 
+def _parquet_list(folder):
+    return f"'{os.path.join(folder, '*.parquet')}'"
+
+
 def combine(out, names):
     """Join the written sources into master.parquet and organisations.parquet.
-    Rows are streamed from the source files rather than held in memory, so
-    tens of millions fit on a small machine."""
-    db = _connect(out, work="combine")
-    files = [_source_path(out, n) for n in names if os.path.exists(_source_path(out, n))]
+    Rows are streamed from the source files and the work is done a piece at a
+    time (one source, then one slice of the groups), so tens of millions of
+    rows fit on a small machine and a small disk."""
+    files = {n: _source_path(out, n) for n in names if os.path.exists(_source_path(out, n))}
     keys_path = os.path.join(out, "keys.csv.gz.part")
+    groups = os.path.join(out, ".groups.parquet")
 
     def rows():
-        for path in files:
+        for path in files.values():
             with gzip.open(path, "rt", encoding="utf-8", newline="") as handle:
                 for row in csv.DictReader(handle):
                     yield {k: v or "" for k, v in row.items()}
 
     write_keys(rows(), keys_path)
+    db = _connect(out, work="combine")
     group_in(db, keys_path)  # Only records joined to another get a group.
     os.remove(keys_path)
     os.remove(keys_path + ".ids")
-    listing = ", ".join("'" + f.replace("'", "''") + "'" for f in files)
-    columns = ", ".join(f"r.{f}" for f in FIELDS)
+    write_groups(db, out, groups)
+    return assemble(out, files, groups)
+
+
+def _extra():
+    return sorted(n for n, loader in registry().items() if loader.SOURCE.get("enrich_only"))
+
+
+def write_groups(db, out, groups):
+    """Save the groups table, with whether each group holds an entry from a
+    source that stands on its own, and close the work database."""
     # Enrichment-only sources (owners, accounts) add to organisations found
     # elsewhere; on their own they are just a company number, so they are left out.
-    extra = sorted(n for n, loader in registry().items() if loader.SOURCE.get("enrich_only"))
-    keep = "TRUE"
-    if extra:
-        quoted = ", ".join(f"'{n}'" for n in extra)
-        keep = (f"r.source NOT IN ({quoted}) OR g.group_id IN (SELECT group_id FROM groups "
-                f"WHERE split_part(record_id, ':', 1) NOT IN ({quoted}))")
-    master = os.path.join(out, "master.parquet")
+    extra = _extra()
+    quoted = ", ".join(f"'{n}'" for n in extra) or "''"
     db.execute(f"""COPY (
-        SELECT {columns}, coalesce(g.group_id, r.record_id) AS group_id
-        FROM read_csv([{listing}], header=true, all_varchar=true, delim=',', quote='"', escape='"',
-                      union_by_name=true) r
-        LEFT JOIN groups g USING (record_id)
-        WHERE {keep}
-    ) TO '{master}' (FORMAT parquet, COMPRESSION zstd)""")
-    organisations = os.path.join(out, "organisations.parquet")
+        SELECT record_id, group_id, split_part(record_id, ':', 1) AS source,
+               bool_or(split_part(record_id, ':', 1) NOT IN ({quoted}))
+                   OVER (PARTITION BY group_id) AS anchored
+        FROM groups) TO '{groups}' (FORMAT parquet, COMPRESSION zstd)""")
+    db.close()
+    os.remove(os.path.join(out, ".combine.duckdb"))
+    if os.path.exists(os.path.join(out, ".combine.duckdb.wal")):
+        os.remove(os.path.join(out, ".combine.duckdb.wal"))
+
+
+def assemble(out, files, groups):
+    """master.parquet and organisations.parquet from the sources and groups."""
+    import shutil
+    extra = _extra()
+    db = _connect(out)
+    parts = os.path.join(out, ".master-parts")
+    shutil.rmtree(parts, ignore_errors=True)
+    os.makedirs(parts)
+    for name, path in files.items():
+        with gzip.open(path, "rt", encoding="utf-8", newline="") as handle:
+            header = set(next(csv.reader(handle), []))
+        columns = ", ".join(f"r.{f}" if f in header else f"'' AS {f}" for f in FIELDS)
+        keep = "g.anchored" if name in extra else "TRUE"
+        db.execute(f"""COPY (
+            SELECT {columns}, coalesce(g.group_id, r.record_id) AS group_id,
+                   g.group_id IS NOT NULL AS joined
+            FROM read_csv('{path}', header=true, all_varchar=true, delim=',', quote='"', escape='"') r
+            LEFT JOIN (SELECT record_id, group_id, anchored FROM '{groups}' WHERE source = ?) g
+                USING (record_id)
+            WHERE {keep}
+        ) TO '{os.path.join(parts, safe_name(name) + ".parquet")}' (FORMAT parquet, COMPRESSION zstd)""",
+                   [name])
+    os.remove(groups)
+    master = os.path.join(out, "master.parquet")
+    db.execute(f"COPY (SELECT * EXCLUDE (joined) FROM {_parquet_list(parts)}) TO '{master}' "
+               "(FORMAT parquet, COMPRESSION zstd)")
+
+    pieces = os.path.join(out, ".organisation-parts")
+    shutil.rmtree(pieces, ignore_errors=True)
+    os.makedirs(pieces)
     db.execute(f"""COPY (
         SELECT group_id, {_ORGANISATION_COLUMNS}, source AS sources, record_id AS record_ids, fetched
-        FROM '{master}' WHERE group_id NOT IN (SELECT group_id FROM groups)
-        UNION ALL BY NAME
-        SELECT group_id,
-               first(name ORDER BY name = '', length(emails) DESC) AS name,
-               string_agg(DISTINCT kind, '; ' ORDER BY kind) AS kind,
-               string_agg(DISTINCT nullif(category, ''), '; ' ORDER BY nullif(category, '')) AS category,
-               string_agg(DISTINCT nullif(legal_form, ''), '; ' ORDER BY nullif(legal_form, '')) AS legal_form,
-               any_value(nullif(address, '')) AS address, any_value(nullif(town, '')) AS town,
-               any_value(nullif(region, '')) AS region, any_value(nullif(postcode, '')) AS postcode,
-               first(country) AS country,
-               string_agg(DISTINCT nullif(website, ''), '; ' ORDER BY nullif(website, '')) AS website,
-               {_merge('emails')} AS emails, {_merge('phones')} AS phones,
-               {_merge('socials')} AS socials, {_merge('people')} AS people,
-               -- One register calling it a company is enough; it is the
-               -- legal form, not the register, that decides.
-               CASE WHEN bool_or(can_email = 'can email') THEN 'can email'
-                    ELSE first(can_email) END AS can_email,
-               string_agg(DISTINCT source, '; ' ORDER BY source) AS sources,
-               string_agg(record_id, '; ') AS record_ids,
-               max(fetched) AS fetched
-        FROM '{master}' WHERE group_id IN (SELECT group_id FROM groups) GROUP BY group_id
-    ) TO '{organisations}' (FORMAT parquet, COMPRESSION zstd)""")
+        FROM {_parquet_list(parts)} WHERE NOT joined
+    ) TO '{os.path.join(pieces, "single.parquet")}' (FORMAT parquet, COMPRESSION zstd)""")
+    slices = 16
+    for piece in range(slices):
+        db.execute(f"""COPY (
+            SELECT group_id,
+                   first(name ORDER BY name = '', length(emails) DESC) AS name,
+                   string_agg(DISTINCT kind, '; ' ORDER BY kind) AS kind,
+                   string_agg(DISTINCT nullif(category, ''), '; ' ORDER BY nullif(category, '')) AS category,
+                   string_agg(DISTINCT nullif(legal_form, ''), '; ' ORDER BY nullif(legal_form, '')) AS legal_form,
+                   any_value(nullif(address, '')) AS address, any_value(nullif(town, '')) AS town,
+                   any_value(nullif(region, '')) AS region, any_value(nullif(postcode, '')) AS postcode,
+                   first(country) AS country,
+                   string_agg(DISTINCT nullif(website, ''), '; ' ORDER BY nullif(website, '')) AS website,
+                   {_merge('emails')} AS emails, {_merge('phones')} AS phones,
+                   {_merge('socials')} AS socials, {_merge('people')} AS people,
+                   -- One register calling it a company is enough; it is the
+                   -- legal form, not the register, that decides.
+                   CASE WHEN bool_or(can_email = 'can email') THEN 'can email'
+                        ELSE first(can_email) END AS can_email,
+                   string_agg(DISTINCT source, '; ' ORDER BY source) AS sources,
+                   string_agg(record_id, '; ') AS record_ids,
+                   max(fetched) AS fetched
+            FROM {_parquet_list(parts)} WHERE joined AND hash(group_id) % {slices} = {piece}
+            GROUP BY group_id
+        ) TO '{os.path.join(pieces, f"group-{piece}.parquet")}' (FORMAT parquet, COMPRESSION zstd)""")
+    shutil.rmtree(parts)
+    organisations = os.path.join(out, "organisations.parquet")
+    db.execute(f"COPY (SELECT * FROM read_parquet({_parquet_list(pieces)}, union_by_name=true)) "
+               f"TO '{organisations}' (FORMAT parquet, COMPRESSION zstd)")
+    shutil.rmtree(pieces)
     return db
 
 
