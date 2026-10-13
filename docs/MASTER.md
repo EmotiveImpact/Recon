@@ -18,6 +18,8 @@ Every row is one entry from one register, in the same columns whatever the sourc
 | `source`, `licence`, `source_url`, `fetched` | Which register it came from, under what licence, and when |
 | `group_id` | The same organisation found in several registers shares this |
 
+Besides the registers it holds the open map and company lists that carry most of the contacts: Overture Maps places (UK and US, with emails, phones, websites and social pages), the People Data Labs free company list (websites and LinkedIn pages), Web Data Commons (what businesses' own websites say about them; no emails), Wikidata, the Gender Pay Gap and Modern Slavery registers (large UK employers and a named director), the SBA PPP loan list (US, staff numbers), and Companies House owners and accounts (staff numbers and the director who signed). Owners and accounts are only ever added to a company found in another source: on their own they are just a number.
+
 Recon's own finished searches (`out/<target>-<date>.csv`, newest per target) are loaded too, as the source `recon-runs`, so the emails, phones and websites Recon reads from businesses' own sites join the register entries.
 
 `organisations.parquet` has one row per organisation, with the contacts from every register merged. `sources.csv` lists every register with its link, licence and counts.
@@ -38,7 +40,7 @@ The rules in RULES.md, applied per register and per legal form:
 
 ## Registers left out on purpose
 
-Edem's 2025 Lead Vault lists (scraped from Google Maps; the workspace's safety check blocks loading them), the ICO register of fee payers (its emails are named people, and its licence excludes personal data), the business rates valuation list (licensed for rating only), the Scottish charity register (bans direct marketing), anything scraped from Google Maps, Yelp or LinkedIn, breached data, and anything under a non-commercial licence. Web Data Commons is waiting on Edem's decision because it states no licence.
+Edem's 2025 Lead Vault lists (scraped from Google Maps; the workspace's safety check blocks loading them), the ICO register of fee payers (its emails are named people, and its licence excludes personal data), the business rates valuation list (licensed for rating only), the Scottish charity register (bans direct marketing), anything scraped from Google Maps, Yelp or LinkedIn, breached data, and anything under a non-commercial licence. Web Data Commons states no licence; Edem asked for it (13 October 2026), so it is in without emails, tagged so it can be taken out. SEC Form D is written but waits, because sec.gov refuses downloads from the cloud workspace.
 
 ## Building it
 

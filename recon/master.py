@@ -175,7 +175,8 @@ def _connect(out=None, work=""):
     db = duckdb.connect(path)
     db.execute("SET preserve_insertion_order=false")
     db.execute("SET enable_progress_bar=false")
-    db.execute("SET memory_limit='8GB'")
+    db.execute("SET memory_limit='10GB'")
+    db.execute("SET threads=2")  # Fewer threads, less memory held at once.
     if out:  # Big joins spill to disk next to the database.
         temp = os.path.join(out, ".duckdb-temp")
         os.makedirs(temp, exist_ok=True)
@@ -264,14 +265,23 @@ def assemble(out, files, groups):
     db.execute(f"COPY (SELECT * EXCLUDE (joined) FROM {_parquet_list(parts)}) TO '{master}' "
                "(FORMAT parquet, COMPRESSION zstd)")
 
+    organisations(db, out, parts)
+    return db
+
+
+def organisations(db, out, parts):
+    """organisations.parquet from the master parts: entries on their own as
+    they are, and joined entries merged one slice of groups at a time."""
+    import shutil
     pieces = os.path.join(out, ".organisation-parts")
     shutil.rmtree(pieces, ignore_errors=True)
     os.makedirs(pieces)
-    db.execute(f"""COPY (
-        SELECT group_id, {_ORGANISATION_COLUMNS}, source AS sources, record_id AS record_ids, fetched
-        FROM {_parquet_list(parts)} WHERE NOT joined
-    ) TO '{os.path.join(pieces, "single.parquet")}' (FORMAT parquet, COMPRESSION zstd)""")
-    slices = 16
+    for part in sorted(os.listdir(parts)):  # One source at a time, to keep memory low.
+        db.execute(f"""COPY (
+            SELECT group_id, {_ORGANISATION_COLUMNS}, source AS sources, record_id AS record_ids, fetched
+            FROM '{os.path.join(parts, part)}' WHERE NOT joined
+        ) TO '{os.path.join(pieces, "single-" + part)}' (FORMAT parquet, COMPRESSION zstd)""")
+    slices = 64
     for piece in range(slices):
         db.execute(f"""COPY (
             SELECT group_id,
@@ -300,7 +310,6 @@ def assemble(out, files, groups):
     db.execute(f"COPY (SELECT * FROM read_parquet({_parquet_list(pieces)}, union_by_name=true)) "
                f"TO '{organisations}' (FORMAT parquet, COMPRESSION zstd)")
     shutil.rmtree(pieces)
-    return db
 
 
 # Postcode areas by nation. Areas that straddle the border with Wales (CH,
@@ -384,7 +393,7 @@ def write_catalogue(out, per_source):
               "records", "with_email", "can_email_with_email", "with_phone", "with_website", "built",
               "pending"]
     with open(path, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fields)
+        writer = csv.DictWriter(handle, fields, extrasaction="ignore")
         writer.writeheader()
         for source in catalogue():
             numbers = counts.get(source["name"])
