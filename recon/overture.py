@@ -7,7 +7,7 @@ DuckDB, so nothing large is downloaded. Needs `pip install duckdb`.
 import re
 import urllib.request
 
-from . import places, text
+from . import contacts, places, text
 from .emails import best_email
 
 BUCKET = "https://overturemaps-us-west-2.s3.amazonaws.com"
@@ -117,13 +117,16 @@ def to_place(target, row):
     if not sector or not name:
         return None
     website = next((w for w in websites or [] if text.own_website(w)), "")
-    email = best_email([e.strip().lower() for e in emails or [] if "@" in (e or "")],
-                       text.domain(website))
-    return places.blank(
+    listed = [e.strip().lower() for e in emails or [] if "@" in (e or "")]
+    email = best_email(listed, text.domain(website))
+    place = places.blank(
         name=name, sector=sector, category=primary, address=street, town=town,
         postcode=text.postcode(code or street, target.country),
         lat=round(lat, 6), lon=round(lon, 6), website=website,
-        phone=(phones or [""])[0], source="overture", source_id=pid,
+        source="overture", source_id=pid,
         email=email, email_found_on="overture" if email else "",
-        socials=" ".join(dict.fromkeys(s for s in socials or [] if s)),
     )
+    contacts.add_emails(place, listed, text.domain(website))
+    contacts.add_phones(place, [p for p in phones or [] if p], target.country)
+    contacts.add_socials(place, [*(socials or []), *(websites or [])])
+    return place

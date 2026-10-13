@@ -84,7 +84,8 @@ def step_emails(target, store, args):
     folder = os.path.dirname(store)
     cache = os.path.join(folder, "email-cache.jsonl")
     print("Looking for emails on businesses' own websites…")
-    emails.fill(rows, cache, everyone=args.all_emails, workers=args.workers)
+    everyone = not args.can_email_only
+    emails.fill(rows, cache, everyone=everyone, workers=args.workers, country=target.country)
     lookup = None
     if args.hunter:
         if hunter.key():
@@ -94,7 +95,7 @@ def step_emails(target, store, args):
             print("  --hunter needs RECON_HUNTER_KEY; carrying on without Hunter")
     print("Working out address patterns and named contacts…")
     finder.fill(rows, emails.load(cache), people.load(os.path.join(folder, "people-cache.jsonl")),
-                hunter=lookup, everyone=args.all_emails)
+                hunter=lookup, everyone=everyone)
     places.write(store, rows)
     print(f"  {sum(1 for r in rows if r['email']):,} businesses now have an email; "
           f"{sum(1 for r in rows if r['contact_email']):,} have a named person's address")
@@ -166,8 +167,10 @@ def main(argv=None):
     parser.add_argument("--overture-release", help="defaults to the newest")
     parser.add_argument("--skip-overture", action="store_true")
     parser.add_argument("--skip-osm", action="store_true")
-    parser.add_argument("--all-emails", action="store_true",
-                        help="also look up emails for 'post only' businesses")
+    parser.add_argument("--can-email-only", action="store_true",
+                        help="only read the websites of businesses we may email "
+                             "(by default every website is read, so you see every address)")
+    parser.add_argument("--all-emails", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--words", nargs="*", default=["hair", "beauty", "spa", "salon"],
                         help="for 'categories': words to look for in category names")

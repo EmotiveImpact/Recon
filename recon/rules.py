@@ -5,6 +5,7 @@ answer is "post only", which is always allowed for business-to-business letters.
 See docs/RULES.md for the reasoning.
 """
 
+from . import contacts
 from .companies_house import is_corporate
 
 CAN_EMAIL = "can email"
@@ -27,3 +28,4 @@ def contact_rule(place, country):
 def apply(places, country):
     for place in places:
         place["contact_rule"] = contact_rule(place, country)
+        contacts.add_phones(place, [], country)  # Sources were joined; label afresh.

@@ -5,9 +5,10 @@ import os
 
 FIELDS = [
     "key", "name", "sector", "category", "address", "town", "postcode",
-    "lat", "lon", "website", "phone", "socials", "source", "source_id",
+    "lat", "lon", "website", "phone", "phone_type", "mobile", "landline", "all_phones",
+    "mobile_only", "socials", "source", "source_id",
     "company_number", "company_name", "company_type",
-    "contact_rule", "email", "email_found_on", "email_check", "email_confidence",
+    "contact_rule", "email", "email_type", "all_emails", "email_found_on", "email_check", "email_confidence",
     "email_reason", "email_basis", "email_pattern", "mail_server",
     "contact_name", "contact_role", "contact_email", "contact_email_check",
     "contact_email_confidence", "contact_email_reason", "contact_email_basis",

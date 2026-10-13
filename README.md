@@ -11,10 +11,11 @@ It uses free, open data only. Nothing is bought and nothing is scraped from Goog
 1. **Finds businesses** in [Overture Maps](https://overturemaps.org) (open data from Microsoft, Meta, Amazon and others) and [OpenStreetMap](https://www.openstreetmap.org), then joins duplicates.
 2. **Marks UK companies** using the free [Companies House](https://download.companieshouse.gov.uk/en_output.html) monthly file.
 3. **Applies the contact rules** for the country. In the UK, companies and LLPs may be emailed; sole traders and partnerships get post only. See [docs/RULES.md](docs/RULES.md).
-4. **Names a person** at each company we may email: an active director from Companies House (needs a free API key).
-5. **Finds emails** on each business's own website, only for those we may email, politely and with a cache. It learns the pattern the business uses (sarah@, sarah.jones@ and so on) and works out the director's address from it.
-6. **Checks emails**: that the domain takes email, then whether the mailbox exists, using [Reacher](https://github.com/reacherhq/check-if-email-exists) or Recon's own check if either is switched on. Every address gets a confidence score from 0 to 100 and a sentence saying why.
-7. **Exports** `out/<target>-<date>.csv`, which opens in Excel or Google Sheets.
+4. **Gathers every contact detail**: all emails (personal Gmail and Hotmail ones labelled), all phone numbers (mobiles told apart from landlines) and all social links, for every business, so you can see the full picture. Who may be emailed is still decided by step 3.
+5. **Names a person** at each company we may email: an active director from Companies House (needs a free API key).
+6. **Finds emails** on every business's own website, politely and with a cache. It learns the pattern the business uses (sarah@, sarah.jones@ and so on) and works out the director's address from it.
+7. **Checks emails**: that the domain takes email, then whether the mailbox exists, using [Reacher](https://github.com/reacherhq/check-if-email-exists) or Recon's own check if either is switched on. Every address gets a confidence score from 0 to 100 and a sentence saying why.
+8. **Exports** `out/<target>-<date>.csv`, which opens in Excel or Google Sheets.
 
 ## Running it
 
@@ -65,11 +66,13 @@ Copy `targets/saleane-uk.json`, give it the project name and country, and list t
 |---|---|
 | `name`, `sector`, `category` | The business and how we classified it |
 | `address`, `town`, `postcode`, `lat`, `lon` | Where it is |
-| `website`, `phone` | From the map data; booking-platform and social links are left out |
-| `socials` | The business's social links (Instagram, Facebook and so on) from the map data |
+| `website` | From the map data; booking-platform and social links are left out |
+| `phone`, `phone_type`, `mobile`, `landline`, `all_phones`, `mobile_only` | Every number from the map data and the website (tel: links), each labelled mobile, landline or non-geographic. `mobile_only` is "yes" when the only numbers are mobiles, often a sign of a sole trader. Screen against the TPS and CTPS before calling |
+| `socials` | Every social link (Instagram, Facebook, TikTok and so on) from the map data and the website |
 | `company_number`, `company_name`, `company_type` | Its Companies House record, when matched |
 | `contact_rule` | `can email`, `post only` or `check local rules` |
-| `email`, `email_found_on`, `email_check` | The business's main email, the page it was on, and the check result |
+| `email`, `email_type`, `email_found_on`, `email_check` | The business's main email, its kind (shared inbox, named person, personal, other business domain), the page it was on, and the check result |
+| `all_emails` | Every address found anywhere, each labelled the same way. Seeing an address is not permission to email it: `contact_rule` decides |
 | `email_confidence`, `email_reason`, `email_basis` | A score from 0 to 100 (70 or more is ready), why, and where the address came from |
 | `email_pattern`, `mail_server` | The pattern the business's addresses follow, and whether its domain takes email |
 | `contact_name`, `contact_role` | One director, for companies we may email |

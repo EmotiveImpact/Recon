@@ -17,7 +17,7 @@ only" rows, and only one person per business.
 
 import collections
 
-from . import patterns, text
+from . import contacts, patterns, text
 from .emails import best_email
 
 CAN_EMAIL = "can email"
@@ -72,8 +72,15 @@ def score(basis, check="", mail_server="", name="", pattern=""):
 
 
 def rescore(place):
+    site = text.domain(place["website"])
+    place["email_type"] = contacts.email_label(place["email"], site) if place["email"] else ""
+    if place["email"]:
+        contacts.add_emails(place, [place["email"]], site)
     place["email_confidence"], place["email_reason"] = score(
         place["email_basis"], place["email_check"], place["mail_server"])
+    if place["email_type"] == contacts.PERSONAL and place["email_reason"]:
+        place["email_reason"] += (" It is a personal address at "
+                                  f"{place['email'].partition('@')[2]}.")
     if not place["contact_email"]:
         place["contact_email_confidence"] = place["contact_email_reason"] = ""
         return
@@ -158,7 +165,7 @@ def _clear_contact(place):
         place[field] = ""
 
 
-def fill(places, found, people=None, hunter=None, everyone=False):
+def fill(places, found, people=None, hunter=None, everyone=True):
     """found: {site: {email: page}} from emails.load(); people: {company number:
     [{'name', 'role'}]} from people.load(); hunter: a hunter.Lookup or None."""
     people = people or {}

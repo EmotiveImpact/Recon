@@ -9,7 +9,7 @@ import threading
 import unittest
 import zipfile
 
-from recon import (companies_house, dns, emails, finder, hunter, mailbox, merge, osm,
+from recon import (companies_house, contacts, dns, emails, finder, hunter, mailbox, merge, osm,
                    overture, patterns, people, places, rules, text, verify)
 from recon.target import Target
 
@@ -155,7 +155,10 @@ class _Site(http.server.BaseHTTPRequestHandler):
     pages = {
         "/robots.txt": "User-agent: *\nDisallow: /private\n",
         "/": '<html><a href="/contact">Contact us</a><a href="/private">x</a></html>',
-        "/contact": '<p>Write to <a href="mailto:bookings@glowroom.co.uk">us</a></p>',
+        "/contact": ('<p>Write to <a href="mailto:bookings@glowroom.co.uk">us</a> or ring '
+                     '<a href="tel:+447700900123">us</a>. '
+                     '<a href="https://www.instagram.com/glowroom/?hl=en">Instagram</a> '
+                     '<a href="https://www.facebook.com/sharer.php?u=x">Share</a></p>'),
     }
 
     def do_GET(self):
@@ -187,17 +190,29 @@ class CrawlTests(unittest.TestCase):
         self.assertEqual(email, "bookings@glowroom.co.uk")
         self.assertTrue(found_on.endswith("/contact"), found_on)
 
+    def test_phones_and_socials_are_collected_on_the_way(self):
+        extras = {}
+        emails.crawl(self.url, extras)
+        self.assertEqual(extras["phones"], ["+447700900123"])
+        self.assertEqual(extras["socials"], ["https://www.instagram.com/glowroom/?hl=en"])
+        place = places.blank(name="A", website=self.url, contact_rule=rules.POST_ONLY)
+        with tempfile.TemporaryDirectory() as folder:
+            emails.fill([place], os.path.join(folder, "cache.jsonl"), workers=1)
+        self.assertEqual(place["mobile"], "07700 900123")
+        self.assertEqual(place["socials"], "https://www.instagram.com/glowroom")
+        self.assertIn("bookings@glowroom.co.uk (shared inbox)", place["all_emails"])
+
     def test_fill_only_visits_places_we_may_email_and_caches(self):
         allowed = places.blank(name="A", website=self.url, contact_rule=rules.CAN_EMAIL)
         post_only = places.blank(name="B", website="https://b-studio.co.uk",
                                  contact_rule=rules.POST_ONLY)
         with tempfile.TemporaryDirectory() as folder:
             cache = os.path.join(folder, "cache.jsonl")
-            visited = emails.fill([allowed, post_only], cache, workers=1)
+            visited = emails.fill([allowed, post_only], cache, everyone=False, workers=1)
             self.assertEqual(visited, 1)
             self.assertEqual(post_only["email_found_on"], "")
             again = places.blank(name="A2", website=self.url, contact_rule=rules.CAN_EMAIL)
-            self.assertEqual(emails.fill([again], cache, workers=1), 0)
+            self.assertEqual(emails.fill([again], cache, everyone=False, workers=1), 0)
             self.assertEqual(again["email_found_on"], allowed["email_found_on"])
 
 
@@ -484,10 +499,19 @@ class OvertureTests(unittest.TestCase):
 
 
 class ListedEmailTests(unittest.TestCase):
-    def test_listed_email_is_dropped_for_post_only_rows(self):
+    def test_post_only_rows_show_every_email_labelled(self):
         place = _company(contact_rule=rules.POST_ONLY, email="jo@gmail.com",
                          email_found_on="overture")
         finder.fill([place], {})
+        self.assertEqual(place["email"], "jo@gmail.com")
+        self.assertEqual(place["email_type"], contacts.PERSONAL)
+        self.assertIn("personal address at gmail.com", place["email_reason"])
+        self.assertEqual(place["contact_email"], "")
+
+    def test_can_email_only_drops_listed_email_for_post_only_rows(self):
+        place = _company(contact_rule=rules.POST_ONLY, email="jo@gmail.com",
+                         email_found_on="overture")
+        finder.fill([place], {}, everyone=False)
         self.assertEqual(place["email"], "")
 
     def test_listed_email_scores_and_is_upgraded_when_also_on_the_site(self):
@@ -503,6 +527,45 @@ class ListedEmailTests(unittest.TestCase):
         found = {"glowroom.co.uk": {"hello@glowroom.co.uk": "https://glowroom.co.uk/"}}
         finder.fill([place], found)
         self.assertEqual(place["email"], "hello@glowroom.co.uk")
+
+
+class ContactTests(unittest.TestCase):
+    def test_uk_phone_numbers(self):
+        self.assertEqual(contacts.uk_phone("+44 (0)20 7946 0000"), ("020 7946 0000", "landline"))
+        self.assertEqual(contacts.uk_phone("+447700900123"), ("07700 900123", "mobile"))
+        self.assertEqual(contacts.uk_phone("0800 123 4567")[1], "non-geographic")
+        self.assertEqual(contacts.uk_phone("07012 345678")[1], "other")
+        self.assertEqual(contacts.uk_phone("+1 512 555 0100"), ("", ""))
+
+    def test_mobile_only_is_flagged(self):
+        place = places.blank(phone="07700900123")
+        contacts.add_phones(place, ["+44 7700 900123", "07700 900456"], "GB")
+        self.assertEqual(place["all_phones"], "07700 900123 (mobile); 07700 900456 (mobile)")
+        self.assertEqual((place["phone_type"], place["mobile_only"]), ("mobile", "yes"))
+        contacts.add_phones(place, ["01225 123456"], "GB")
+        self.assertEqual((place["landline"], place["mobile_only"]), ("01225 123456", ""))
+
+    def test_email_labels(self):
+        self.assertEqual(contacts.email_label("jo@hotmail.co.uk", "glowroom.co.uk"), "personal")
+        self.assertEqual(contacts.email_label("info@glowroom.co.uk", "glowroom.co.uk"),
+                         "shared inbox")
+        self.assertEqual(contacts.email_label("sarah@glowroom.co.uk", "glowroom.co.uk"),
+                         "named person")
+        self.assertEqual(contacts.email_label("sarah@salongroup.com", "glowroom.co.uk"),
+                         "other business domain")
+
+    def test_osm_handles_become_links_and_sources_are_joined(self):
+        place = osm.to_place(TARGET, {"type": "node", "id": 7, "lat": 51.5, "lon": -0.1, "tags": {
+            "shop": "beauty", "name": "Glow Room", "addr:postcode": "SW1A 1AA",
+            "contact:instagram": "glowroom", "mobile": "07700 900123",
+            "email": "hi@glowroom.co.uk;jo@gmail.com"}})
+        self.assertEqual(place["socials"], "https://www.instagram.com/glowroom")
+        self.assertEqual(place["mobile"], "07700 900123")
+        other = places.blank(name="Glow Room", postcode="SW1A 1AA", source="overture",
+                             source_id="o1", all_phones="020 7946 0000 (landline)")
+        joined = merge.combine([other], [place])[0]
+        self.assertEqual(joined["all_phones"], "020 7946 0000 (landline); 07700 900123 (mobile)")
+        self.assertIn("jo@gmail.com (personal)", joined["all_emails"])
 
 
 class VerifyTests(unittest.TestCase):

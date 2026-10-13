@@ -4,6 +4,9 @@ import hashlib
 
 from . import text
 
+# Columns holding several values: every source's values are kept.
+LISTS = {"all_emails": "; ", "all_phones": "; ", "socials": " "}
+
 # Prefer Overture's record; OpenStreetMap fills its gaps.
 SOURCE_ORDER = {"overture": 0, "osm": 1, "companies_house": 2}
 
@@ -43,6 +46,11 @@ def combine(*groups):
         for field, value in place.items():
             if value and not kept.get(field):
                 kept[field] = value
+            elif value and field in LISTS:
+                sep = LISTS[field]
+                items = kept[field].split(sep) + [v for v in value.split(sep)
+                                                  if v not in kept[field].split(sep)]
+                kept[field] = sep.join(items)
         if place["source"] not in kept["source"].split("+"):
             kept["source"] += "+" + place["source"]
     return list(merged.values()) + loose

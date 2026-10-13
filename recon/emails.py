@@ -17,7 +17,7 @@ import urllib.robotparser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
-from . import text
+from . import contacts, text
 
 USER_AGENT = "Mozilla/5.0 (compatible; recon/0.1; in-house research)"
 MAX_BYTES = 1_000_000
@@ -25,6 +25,7 @@ MAX_EXTRA_PAGES = 3
 TIMEOUT = 12
 
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}")
+_HREF = re.compile(r"""href\s*=\s*["']([^"']+)["']""", re.I)
 _LINK = re.compile(r"""<a\b[^>]*href\s*=\s*["']([^"'#]+)["'][^>]*>(.*?)</a>""", re.I | re.S)
 _CONTACTISH = re.compile(r"contact|about|get-in-touch|find-us|visit|book|enquir|team|meet|staff",
                          re.I)
@@ -133,12 +134,36 @@ def contact_links(page, base):
     return links[:MAX_EXTRA_PAGES]
 
 
-def crawl(website):
+def phones_and_socials(page):
+    """Phone numbers from tel: links, and links to social profiles."""
+    phones, socials = [], []
+    for href in _HREF.findall(page):
+        href = html.unescape(href).strip()
+        if href.lower().startswith("tel:"):
+            phones.append(urllib.parse.unquote(href[4:]))
+        elif contacts.social_link(href):
+            socials.append(href)
+    return phones, socials
+
+
+def crawl(website, extras=None):
     """Every address on a business's own site: ({email: page it was on}, note).
 
     Reads the homepage, then up to three same-site pages that look like
-    contact, about or team pages (or /contact when none is linked).
+    contact, about or team pages (or /contact when none is linked). Phone
+    numbers and social links found on the way go into extras, if given.
     """
+    extras = {} if extras is None else extras
+    extras.setdefault("phones", [])
+    extras.setdefault("socials", [])
+
+    def read(page, url):
+        for email in clean_candidates(page):
+            found_on.setdefault(email, url)
+        phones, socials = phones_and_socials(page)
+        extras["phones"] += [p for p in phones if p not in extras["phones"]]
+        extras["socials"] += [s for s in socials if s not in extras["socials"]]
+
     if not text.own_website(website):
         return {}, "not the business's own site"
     start = website if "://" in website else "https://" + website
@@ -148,8 +173,7 @@ def crawl(website):
         if not robots.can_fetch(USER_AGENT, start):
             return {}, "site asks robots not to visit"
         page, final_url = _fetch(start)
-        for email in clean_candidates(page):
-            found_on.setdefault(email, final_url)
+        read(page, final_url)
         links = contact_links(page, final_url) or [
             urllib.parse.urljoin(final_url, path) for path in _FALLBACK_PAGES]
         for link in links[:MAX_EXTRA_PAGES]:
@@ -160,8 +184,7 @@ def crawl(website):
                 more, _ = _fetch(link)
             except urllib.error.HTTPError:
                 continue  # A missing page is no reason to give up on the site.
-            for email in clean_candidates(more):
-                found_on.setdefault(email, link)
+            read(more, link)
         return found_on, "" if found_on else "no email on the site"
     except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError) as error:
         return found_on, f"could not open site ({type(error).__name__})"
@@ -185,6 +208,8 @@ def _load_cache(path):
                     row = json.loads(line)
                     if "candidates" not in row:  # Written before all addresses were kept.
                         row["candidates"] = {row["email"]: row["found_on"]} if row["email"] else {}
+                    row.setdefault("phones", [])
+                    row.setdefault("socials", [])
                     cache[row["domain"]] = row
                 except (json.JSONDecodeError, KeyError):
                     continue  # Skip a half-written last line.
@@ -196,8 +221,12 @@ def load(cache_path):
     return {site: row["candidates"] for site, row in _load_cache(cache_path).items()}
 
 
-def _use(place, row):
-    """Put a site's best published address on a place that has none yet."""
+def _use(place, row, country):
+    """Add what a site gave to a place: every address, phone and social link,
+    and its best address if the place has none yet."""
+    contacts.add_emails(place, row["candidates"], row["domain"])
+    contacts.add_phones(place, row["phones"], country)
+    contacts.add_socials(place, row["socials"])
     if place["email"]:
         return
     email = best_email(list(row["candidates"]), row["domain"])
@@ -205,11 +234,12 @@ def _use(place, row):
     place["email_found_on"] = row["candidates"][email] if email else row["found_on"]
 
 
-def fill(places, cache_path, everyone=False, workers=8):
-    """Read the own websites of places we may email, keeping every address found.
+def fill(places, cache_path, everyone=True, workers=8, country="GB"):
+    """Read every business's own website, keeping every address found.
 
-    By default only places we may email are looked up: collecting addresses
-    we cannot lawfully use is pointless and goes against data minimisation.
+    Edem chose (13 October 2026) to see every address, so by default all
+    sites are read; the contact_rule column still decides who may be
+    emailed. everyone=False reads only the sites of places we may email.
     """
     cache = _load_cache(cache_path)
     todo = {}
@@ -220,7 +250,7 @@ def fill(places, cache_path, everyone=False, workers=8):
             continue
         site = text.domain(place["website"])
         if site in cache:
-            _use(place, cache[site])
+            _use(place, cache[site], country)
         else:
             todo.setdefault(site, []).append(place)
 
@@ -229,7 +259,8 @@ def fill(places, cache_path, everyone=False, workers=8):
     done = 0
     with open(cache_path, "a", encoding="utf-8") as log, \
             ThreadPoolExecutor(max_workers=workers) as pool:
-        jobs = {pool.submit(crawl, group[0]["website"]): site
+        extras = {site: {} for site in todo}
+        jobs = {pool.submit(crawl, group[0]["website"], extras[site]): site
                 for site, group in todo.items()}
         for job in as_completed(jobs):
             site = jobs[job]
@@ -238,12 +269,14 @@ def fill(places, cache_path, everyone=False, workers=8):
             row = {
                 "domain": site, "email": email,
                 "found_on": found_on[email] if email else note, "candidates": found_on,
+                "phones": extras[site].get("phones", []),
+                "socials": extras[site].get("socials", []),
                 "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             }
             log.write(json.dumps(row) + "\n")
             log.flush()
             for place in todo[site]:
-                _use(place, row)
+                _use(place, row, country)
             done += 1
             if done % 100 == 0:
                 print(f"  {done} of {len(todo)} websites visited")
