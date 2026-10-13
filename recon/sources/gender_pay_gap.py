@@ -11,6 +11,7 @@ Companies and public bodies (councils, NHS bodies, universities and the like)
 may be emailed; anyone else is post only.
 """
 
+import glob
 import os
 import re
 import urllib.request
@@ -33,7 +34,7 @@ BASE = "https://gender-pay-gap.service.gov.uk"
 _YEAR_LINK = re.compile(r'href="/viewing/download-data/(\d{4})"')
 
 # A folder where another session may already have fetched the files, one
-# subfolder per source (or loose files); set RECON_INCOMING to look elsewhere.
+# subfolder per source; set RECON_INCOMING to look elsewhere.
 INCOMING = "/mnt/project-files/master-db/incoming"
 
 # The service uses SIC code 1 for public sector employers.
@@ -91,11 +92,12 @@ def site_from_link(link):
     return "https://" + ".".join(labels)
 
 
-def incoming(source, filename):
-    """A copy already fetched into the incoming folder, or None."""
-    folder = os.environ.get("RECON_INCOMING", INCOMING)
-    for path in (os.path.join(folder, source, filename), os.path.join(folder, filename)):
-        if os.path.exists(path) and os.path.getsize(path) > 0:
+def incoming(source, year):
+    """A CSV for this year already fetched into the incoming folder
+    (incoming/<source>/, any CSV with the year in its name), or None."""
+    folder = os.path.join(os.environ.get("RECON_INCOMING", INCOMING), source)
+    for path in sorted(glob.glob(os.path.join(folder, f"*{year}*.csv")), reverse=True):
+        if os.path.getsize(path) > 0:
             return path
     return None
 
@@ -115,7 +117,7 @@ def year_file(year, newest, cache):
     """One year's CSV. The newest year still takes late reports, so its copy
     is named with today's date and fetched again on a later day."""
     if year != newest:
-        found = incoming(SOURCE["name"], f"gender-pay-gap-{year}.csv")
+        found = incoming(SOURCE["name"], year)
         if found:
             return found
     name = f"gpg-{year}.csv" if year != newest else f"gpg-{year}-{date.today().isoformat()}.csv"

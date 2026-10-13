@@ -216,6 +216,69 @@ class SourceRuleTests(unittest.TestCase):
                          sba_ppp.borrower_key({**base, "BorrowerZip": "29150", "BorrowerName": "Sumter  Coatings, Inc."}))
         self.assertTrue(sba_ppp.WITHHELD.match("Exemption 6"))
 
+    def test_gender_pay_gap(self):
+        from recon.sources import gender_pay_gap as gpg
+        base = {"EmployerId": "7", "EmployerName": "Acme Widgets", "CurrentName": "Acme Widgets",
+                "Address": "1 High Street, Leeds, United Kingdom, LS1 4DL", "PostCode": "LS1 4DL",
+                "CompanyNumber": "", "SicCodes": "47730,\n82990", "EmployerSize": "250 to 499",
+                "CompanyLinkToGPGInfo": "https://careers.acme.co.uk/gender-pay.pdf",
+                "ResponsiblePerson": "Jane Smith (Chief People Officer)"}
+        made = gpg.to_record(base, 2025)
+        self.assertEqual(made["can_email"], "post only")
+        self.assertEqual(made["website"], "https://acme.co.uk")
+        self.assertEqual(made["people"], "Jane Smith (Chief People Officer)")
+        self.assertEqual(made["category"], "SIC 47730; SIC 82990; 250 to 499 staff")
+        self.assertEqual(made["town"], "Leeds")
+        made = gpg.to_record({**base, "CompanyNumber": "1234567"}, 2025)
+        self.assertEqual((made["can_email"], made["company_number"]), ("can email", "01234567"))
+        council = gpg.to_record({**base, "CurrentName": "Leeds City Council", "SicCodes": "1"}, 2025)
+        self.assertEqual((council["can_email"], council["kind"]), ("can email", "public body"))
+        self.assertEqual(gpg.site_from_link("https://assets.publishing.service.gov.uk/x.pdf"), "")
+        self.assertEqual(gpg.site_from_link("https://drive.google.com/file/d/1"), "")
+        self.assertEqual(gpg.site_from_link("https://www.leeds.gov.uk/pay"), "https://leeds.gov.uk")
+
+    def test_modern_slavery(self):
+        from recon.sources import modern_slavery as msr
+        base = {"StatementYear": "2025", "OrganisationName": "Acme Widgets", "SectorType": "Private",
+                "Address": "1 High Street\nLeeds\nUnited Kingdom\nLS1 4DL", "CompanyNumber": "",
+                "StatementURL": "https://cdn.prod.website-files.com/a/statement.pdf",
+                "EmailAddressNoURL": "info@acme.co.uk", "ApprovingPerson": "Jo Bloggs (Director)",
+                "OrganisationSectors": "Retail\nWholesale", "Turnover": "£36 million to £60 million",
+                "StatementSummaryURL": "https://example.org/s/1", "ParentName": "", "LastUpdated": "01/06/2025"}
+        made = msr.to_record(base)
+        self.assertEqual((made["town"], made["postcode"], made["country"]), ("Leeds", "LS1 4DL", "GB"))
+        self.assertEqual(made["website"], "")  # a document host, not their site
+        self.assertEqual((made["emails"], made["can_email"]), ("info@acme.co.uk", "post only"))
+        self.assertEqual(made["category"], "Retail; Wholesale; turnover £36 million to £60 million")
+        made = msr.to_record({**base, "CompanyNumber": "SC123456",
+                              "StatementURL": "https://www.acme.co.uk/msa"})
+        self.assertEqual((made["website"], made["can_email"]), ("https://acme.co.uk", "can email"))
+        self.assertEqual(msr.parse_address("")[3], "GB")
+
+    def test_wikidata(self):
+        from recon.sources import wikidata
+        source = wikidata.SOURCES[0].SOURCE
+        flat = [{"item": "http://www.wikidata.org/entity/Q1", "itemLabel": "Acme", "chn": "",
+                 "website": "https://acme.co.uk/", "linkedin": "acme",
+                 "employees": "300", "country": "http://www.wikidata.org/entity/Q145"},
+                {"item": "http://www.wikidata.org/entity/Q1", "itemLabel": "Acme", "chn": "",
+                 "website": "https://acme.co.uk/shop", "linkedin": "acme", "employees": "",
+                 "country": "http://www.wikidata.org/entity/Q145"}]
+        made = wikidata.to_record(source, "GB", wikidata.merge_flat(flat, "GB")[0])
+        self.assertEqual(made["website"], "https://acme.co.uk/")
+        self.assertEqual(made["socials"], "https://www.linkedin.com/company/acme")
+        self.assertEqual(made["can_email"], "post only")
+        detail = {"item": "http://www.wikidata.org/entity/Q2", "label": "Acme Ltd", "label_gb": "",
+                  "websites": "https://acme.co.uk/", "company_numbers": "01234567", "linkedin": "",
+                  "employees": "250@2021-01-01T00:00:00Z 300@2023-01-01T00:00:00Z 9@",
+                  "emails": "mailto:hello@acme.co.uk", "phones": "+44 20 7946 0000|+1-425-882-8080",
+                  "headquarters": "London", "dissolved": ""}
+        made = wikidata.to_record(source, "GB", detail)
+        self.assertEqual((made["company_number"], made["can_email"]), ("01234567", "can email"))
+        self.assertEqual(made["category"], "300 employees (2023)")
+        self.assertEqual((made["emails"], made["phones"]), ("hello@acme.co.uk", "+442079460000"))
+        self.assertIsNone(wikidata.to_record(source, "GB", {**detail, "dissolved": "2020-01-01"}))
+
     def test_every_loader_describes_its_source(self):
         for name, loader in sources.registry().items():
             for key in ("name", "title", "country", "url", "licence"):

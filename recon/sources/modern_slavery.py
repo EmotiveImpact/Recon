@@ -16,7 +16,7 @@ import os
 import re
 from datetime import date
 
-from .. import text
+from .. import contacts, text
 from . import corporate_name, download, joined, read_csv, record, rule
 from .gender_pay_gap import incoming, site_from_link
 
@@ -43,7 +43,7 @@ def year_file(year, cache):
     """One statement year's CSV. Statements for the current and the coming
     year are still being added, so those copies are dated and fetched again
     on a later day."""
-    found = incoming(SOURCE["name"], f"modern-slavery-statements-{year}.csv")
+    found = incoming(SOURCE["name"], year)
     if found and year < date.today().year - 1:
         return found
     name = f"StatementSummaries{year}.csv"
@@ -104,6 +104,12 @@ def to_record(row):
         can, why = rule("GB", True, "trading as a company")
     else:
         can, why = rule("GB", False, "organisation not shown to be incorporated: post only")
+    emails = [e for e in re.split(r"[;,\s]+", row.get("EmailAddressNoURL") or "") if "@" in e]
+    labels = {contacts.email_label(e.lower()) for e in emails}
+    if contacts.PERSONAL in labels:
+        why += "; personal webmail address listed"
+    elif labels - {contacts.SHARED}:
+        why += "; the statement contact email may be a named person: check before using"
     sectors = [s.strip() for s in re.split(r"[\r\n]+", joined(
         row.get("OrganisationSectors", ""), row.get("OtherOrganisationSector", ""),
         row.get("PublicSectorAuthorities", ""), row.get("OtherPublicSectorAuthorities", ""),
@@ -116,7 +122,7 @@ def to_record(row):
         status=f"modern slavery statement {row.get('StatementYear', '')}".strip(),
         address=address, town=town, postcode=postcode, country=country,
         website=site_from_link(row.get("StatementURL")),
-        emails=row.get("EmailAddressNoURL", ""),
+        emails=emails,
         people=(row.get("ApprovingPerson") or "").strip(),
         company_number=number,
         other_name=f"part of {parent}" if parent and parent.lower() != name.lower() else "",

@@ -22,6 +22,7 @@ organisations may be emailed under CAN-SPAM.
 """
 
 import csv
+import glob
 import hashlib
 import os
 import re
@@ -44,6 +45,20 @@ LEFT_OUT = ("Q215380", "Q2088357")  # musical group, musical ensemble
 CLASS_BATCH = 300
 ITEM_BATCH = 100
 _PAUSE = 1.0  # seconds between live queries, to be gentle on the public service
+# During an outage the service allows one query a minute, which would make a
+# full copy take most of a day. After this much waiting in one run, give up
+# and use the copy in the incoming folder instead, if there is one.
+# In the same way, stop asking after this many seconds of live queries in one
+# run; what was fetched stays cached, so each build gets further.
+WAIT_BUDGET = 600
+TIME_BUDGET = 1800
+_waited = [0]
+_started = []
+
+# A copy fetched earlier by another session: items with a Companies House
+# number or LinkedIn page only, without emails, phones or head offices.
+# Set RECON_INCOMING to look somewhere else.
+INCOMING = "/mnt/project-files/master-db/incoming"
 
 DETAILS = """SELECT ?item (SAMPLE(?l) AS ?label) (SAMPLE(?lg) AS ?label_gb)
   (GROUP_CONCAT(DISTINCT STR(?w); separator=" ") AS ?websites)
@@ -72,11 +87,30 @@ def _qid(uri):
     return (uri or "").rsplit("/", 1)[-1]
 
 
-def ask(query, path):
-    """The answer to a query as a list of rows, kept at path."""
+class Busy(RuntimeError):
+    """The query service keeps refusing: too many requests."""
+
+
+def ask(query, path, waits=3):
+    """The answer to a query as a list of rows, kept at path. When the
+    service says to slow down, wait as long as it asks (a few times at most)."""
     if not (os.path.exists(path) and os.path.getsize(path) > 0):
+        _started[:] = _started or [time.time()]
+        if time.time() - _started[0] > TIME_BUDGET:
+            raise Busy("Wikidata copy not finished within this run's time limit")
         url = ENDPOINT + "?" + urllib.parse.urlencode({"query": " ".join(query.split())})
-        download(url, path, headers=HEADERS, attempts=2)
+        for attempt in range(waits + 1):
+            try:
+                download(url, path, headers=HEADERS, attempts=1)
+                break
+            except urllib.error.HTTPError as error:
+                if error.code != 429:
+                    raise
+                pause = min(int(error.headers.get("Retry-After") or 60), 300)
+                if attempt == waits or _waited[0] + pause > WAIT_BUDGET:
+                    raise Busy("Wikidata query service is rate-limiting") from error
+                _waited[0] += pause
+                time.sleep(pause)
         time.sleep(_PAUSE)
     with open(path, encoding="utf-8", errors="replace", newline="") as handle:
         return list(csv.DictReader(handle))
@@ -103,7 +137,9 @@ def _with_website(country, classes, cache):
              f"?item wdt:P31 ?class; wdt:P17 wd:{COUNTRIES[country]}; wdt:P856 [] . }}")
     try:
         return {_qid(r["item"]) for r in ask(query, os.path.join(cache, country, f"site-{key}.csv"))}
-    except (urllib.error.URLError, OSError):
+    except Busy:
+        raise
+    except OSError:  # Ran out of time: try each half.
         if len(classes) == 1:
             raise
         half = len(classes) // 2
@@ -136,6 +172,47 @@ def details(country, ids, cache):
         query = DETAILS % " ".join(f"wd:{q}" for q in batch)
         name = f"details-{batch[0]}-{batch[-1]}-{len(batch)}.csv"
         yield from ask(query, os.path.join(cache, country, name))
+
+
+def incoming_rows(country):
+    """Rows in the details shape from the incoming copy, or None when there
+    is no copy. Its columns: item, itemLabel, chn, website, linkedin,
+    employees, country (one row per combination of values)."""
+    folder = os.environ.get("RECON_INCOMING", INCOMING)
+    paths = [p for p in sorted(glob.glob(os.path.join(folder, "wikidata", "*.csv")))
+             if os.path.getsize(p) > 0]
+    if not paths:
+        return None
+    found = []
+    for path in paths:
+        with open(path, encoding="utf-8", errors="replace", newline="") as handle:
+            found.extend(csv.DictReader(handle))
+    return merge_flat(found, country)
+
+
+def merge_flat(flat, country):
+    """One details-shaped row per item from rows with one value each."""
+    items = {}
+    for row in flat:
+        if _qid(row.get("country")) != COUNTRIES[country]:
+            continue
+        item = items.setdefault(row["item"], {
+            "item": row["item"], "label": row.get("itemLabel", ""), "websites": [],
+            "company_numbers": [], "linkedin": [], "employees": [], "emails": "", "phones": "",
+            "headquarters": "", "dissolved": ""})
+        for key, column in (("websites", "website"), ("company_numbers", "chn"),
+                            ("linkedin", "linkedin"), ("employees", "employees")):
+            value = (row.get(column) or "").strip()
+            if key == "employees" and value:
+                value += "@"
+            if value and value not in item[key]:
+                item[key].append(value)
+    for item in items.values():
+        if item["label"] == _qid(item["item"]):  # No English label.
+            item["label"] = ""
+        for key in ("websites", "company_numbers", "linkedin", "employees"):
+            item[key] = " ".join(item[key])
+    return list(items.values())
 
 
 def pick_website(websites):
@@ -216,11 +293,18 @@ def _loader(country):
 
     def rows(cache):
         os.makedirs(os.path.join(cache, country), exist_ok=True)
-        ids = item_ids(country, cache)
-        for row in details(country, ids, cache):
-            found = to_record(source, country, row)
-            if found:
-                yield found
+        try:
+            found = list(details(country, item_ids(country, cache), cache))
+        except Busy:
+            found = incoming_rows(country)
+            if found is None:
+                raise
+            print(f"{source['name']}: the query service is slow or rate-limiting; using the incoming "
+                  "copy (company number and LinkedIn items only). Answers fetched so far stay cached.")
+        for row in found:
+            made = to_record(source, country, row)
+            if made:
+                yield made
 
     return types.SimpleNamespace(SOURCE=source, rows=rows)
 
