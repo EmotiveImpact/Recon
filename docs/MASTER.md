@@ -28,7 +28,7 @@ The organisations are also split by country, so each can be opened on its own:
 - `uk/england.parquet`, `uk/scotland.parquet`, `uk/wales.parquet`, `uk/northern-ireland.parquet` (by postcode area; the few areas that straddle the Welsh border count as England), and `uk/unknown.parquet` for rows without a postcode.
 - `us/<state>.parquet`, such as `us/ct.parquet`, from the state in the address.
 - `other/<country>.parquet` for the few registered abroad.
-Each folder has a `counts.csv` with the numbers per nation or state.
+Each folder has a `counts.csv` with the numbers per nation or state. An area whose file is over about 200 MB (England, California) is also written as `<area>/part-N.parquet`, because the shared folder is slow to pass very large files to other workspaces.
 
 ## Who may be emailed
 

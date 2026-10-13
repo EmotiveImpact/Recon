@@ -18,6 +18,7 @@ import csv
 import gzip
 import os
 import re
+import shutil
 from datetime import date
 
 from . import contacts, text
@@ -330,6 +331,9 @@ def _nation_sql(postcode):
                     WHEN {area} <> '' THEN 'england' ELSE 'unknown' END"""
 
 
+SPLIT_BYTES = 200 * 1024 * 1024
+
+
 def segment(out):
     """Split the organisations by country: <out>/uk/<nation>.parquet and
     <out>/us/<state>.parquet, plus a counts file for each country."""
@@ -350,6 +354,19 @@ def segment(out):
             target = os.path.join(path, f"{safe_name(name) or 'unknown'}.parquet")
             db.execute(f"COPY (SELECT * EXCLUDE (area) FROM part WHERE area = ?) TO '{target}' "
                        "(FORMAT parquet, COMPRESSION zstd)", [name])
+            # Big areas are also written as <area>/part-N.parquet, each under
+            # about 200 MB, because the shared folder is slow to pass very
+            # large files to other workspaces.
+            pieces = os.path.getsize(target) // SPLIT_BYTES + 1
+            if pieces > 1:
+                folder_path = target[:-len(".parquet")]
+                shutil.rmtree(folder_path, ignore_errors=True)
+                os.makedirs(folder_path)
+                for piece in range(pieces):
+                    db.execute(f"COPY (SELECT * EXCLUDE (area) FROM part WHERE area = ? "
+                               f"AND hash(group_id) % {pieces} = {piece}) TO "
+                               f"'{os.path.join(folder_path, f'part-{piece}.parquet')}' "
+                               "(FORMAT parquet, COMPRESSION zstd)", [name])
         db.execute(f"""COPY (
             SELECT area, count(*) AS organisations,
                    count(*) FILTER (WHERE emails <> '') AS with_email,
