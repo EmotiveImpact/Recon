@@ -279,6 +279,19 @@ class SourceRuleTests(unittest.TestCase):
         self.assertEqual((made["emails"], made["phones"]), ("hello@acme.co.uk", "+442079460000"))
         self.assertIsNone(wikidata.to_record(source, "GB", {**detail, "dissolved": "2020-01-01"}))
 
+    def test_web_data_commons(self):
+        from recon.sources import web_data_commons as w
+        base = {"page": "https://www.yell.com/biz/pipe", "domain": "yell.com", "name": "Pipe Ltd",
+                "types": "Plumber", "telephone": "0117 496 0000", "website": "https://www.yell.com/x",
+                "socials": "", "street": "1 Quay St", "locality": "Bristol", "region": "",
+                "postcode": "BS1 4DJ", "country": "GB", "site_kind": "directory"}
+        r = w.to_record(1, base)
+        self.assertEqual((r["website"], r["can_email"], r["emails"]), ("", "can email", ""))
+        self.assertIn("listing site", r["rule_reason"])
+        r = w.to_record(2, {**base, "site_kind": "own site", "domain": "pipe.co.uk", "website": "",
+                            "page": "https://pipe.co.uk/"})
+        self.assertEqual((r["website"], r["kind"]), ("https://pipe.co.uk", "business"))
+
     def test_every_loader_describes_its_source(self):
         for name, loader in sources.registry().items():
             for key in ("name", "title", "country", "url", "licence"):
