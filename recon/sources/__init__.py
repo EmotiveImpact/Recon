@@ -179,7 +179,7 @@ LOADERS = ["connecticut", "charity_commission", "washington_vendors", "fmcsa",
            "mot_stations", "nhs_ods", "marriage_venues", "food_hygiene", "companies_house_register",
            "find_that_charity", "traffic_commissioners", "ofs_register", "uk_unions",
            "irs_nonprofits", "us_colleges", "us_unions", "texas_tdlr", "nppes", "us_city_registers",
-           "virginia_dpor", "california_cslb", "cqc"]
+           "virginia_dpor", "california_cslb", "cqc", "recon_runs"]
 
 
 def registry():

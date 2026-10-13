@@ -18,6 +18,8 @@ Every row is one entry from one register, in the same columns whatever the sourc
 | `source`, `licence`, `source_url`, `fetched` | Which register it came from, under what licence, and when |
 | `group_id` | The same organisation found in several registers shares this |
 
+Recon's own finished searches (`out/<target>-<date>.csv`, newest per target) are loaded too, as the source `recon-runs`, so the emails, phones and websites Recon reads from businesses' own sites join the register entries.
+
 `organisations.parquet` has one row per organisation, with the contacts from every register merged. `sources.csv` lists every register with its link, licence and counts.
 
 The organisations are also split by country, so each can be opened on its own:

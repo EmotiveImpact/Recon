@@ -90,6 +90,24 @@ class SourceRuleTests(unittest.TestCase):
         self.assertFalse(cqc.corporate("St Mary's Trust"))
         self.assertEqual(cqc.kind_of("Nursing homes|Residential homes"), "care home")
 
+    def test_recon_runs_use_the_newest_list(self):
+        from recon import places
+        from recon.sources import recon_runs
+        with tempfile.TemporaryDirectory() as folder:
+            places.write(os.path.join(folder, "plumbers-uk-2026-10-01.csv"),
+                         [places.blank(key="a", name="Old Ltd")])
+            places.write(os.path.join(folder, "plumbers-uk-2026-10-13.csv"), [places.blank(
+                key="a", name="Pipe Ltd", sector="Plumbers", postcode="BS1 4DJ",
+                all_emails="info@pipe.co.uk", all_phones="0117 496 0000", company_number="123456",
+                company_match="exact", contact_rule="can email")])
+            with mock.patch.dict(os.environ, {"RECON_RUNS": folder}):
+                found = list(recon_runs.rows(None))
+        self.assertEqual(len(found), 1)
+        r = found[0]
+        self.assertEqual((r["name"], r["emails"], r["company_number"], r["can_email"], r["fetched"]),
+                         ("Pipe Ltd", "info@pipe.co.uk", "00123456", "can email", "2026-10-13"))
+        self.assertEqual(r["record_id"], "recon-runs:plumbers-uk:a")
+
     def test_every_loader_describes_its_source(self):
         for name, loader in sources.registry().items():
             for key in ("name", "title", "country", "url", "licence"):
