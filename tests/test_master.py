@@ -298,6 +298,27 @@ class BuildTests(unittest.TestCase):
             target = os.path.join(out, "glow.csv")
             self.assertEqual(master.export(out, "emails <> ''", target), 2)
 
+    def test_enrichment_joins_but_never_stands_alone(self):
+        a = dict(SOURCE, name="register-a")
+        owners = dict(SOURCE, name="owners", enrich_only=True)
+        loaders = {
+            "register-a": types.SimpleNamespace(SOURCE=a, rows=lambda cache: iter([
+                sources.record(a, 1, "Pipe Ltd", country="GB", company_number="123",
+                               can_email="can email")])),
+            "owners": types.SimpleNamespace(SOURCE=owners, rows=lambda cache: iter([
+                sources.record(owners, 1, "", country="GB", company_number="00000123",
+                               people="Jo Pipe (owner)"),
+                sources.record(owners, 2, "", country="GB", company_number="999",
+                               people="Gone Ltd (corporate owner)")])),
+        }
+        with tempfile.TemporaryDirectory() as out, \
+                mock.patch.object(master, "registry", return_value=loaders):
+            for name in loaders:
+                master.load_source(name, out, os.path.join(out, "cache"))
+            db = master.combine(out, list(loaders))
+            rows = db.execute(f"SELECT name, people FROM '{out}/organisations.parquet'").fetchall()
+        self.assertEqual(rows, [("Pipe Ltd", "Jo Pipe (owner)")])
+
 
 if __name__ == "__main__":
     unittest.main()

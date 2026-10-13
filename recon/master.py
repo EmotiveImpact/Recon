@@ -183,12 +183,21 @@ def combine(out, names):
                "(SELECT group_id FROM groups WHERE record_id <> group_id)")
     listing = ", ".join("'" + f.replace("'", "''") + "'" for f in files)
     columns = ", ".join(f"r.{f}" for f in FIELDS)
+    # Enrichment-only sources (owners, accounts) add to organisations found
+    # elsewhere; on their own they are just a company number, so they are left out.
+    extra = sorted(n for n, loader in registry().items() if loader.SOURCE.get("enrich_only"))
+    keep = "TRUE"
+    if extra:
+        quoted = ", ".join(f"'{n}'" for n in extra)
+        keep = (f"r.source NOT IN ({quoted}) OR g.group_id IN (SELECT group_id FROM groups "
+                f"WHERE split_part(record_id, ':', 1) NOT IN ({quoted}))")
     master = os.path.join(out, "master.parquet")
     db.execute(f"""COPY (
         SELECT {columns}, coalesce(g.group_id, r.record_id) AS group_id
         FROM read_csv([{listing}], header=true, all_varchar=true, delim=',', quote='"', escape='"',
                       union_by_name=true) r
         LEFT JOIN groups g USING (record_id)
+        WHERE {keep}
     ) TO '{master}' (FORMAT parquet, COMPRESSION zstd)""")
     organisations = os.path.join(out, "organisations.parquet")
     db.execute(f"""COPY (
@@ -196,7 +205,7 @@ def combine(out, names):
         FROM '{master}' WHERE group_id NOT IN (SELECT group_id FROM groups)
         UNION ALL BY NAME
         SELECT group_id,
-               first(name ORDER BY length(emails) DESC) AS name,
+               first(nullif(name, '') ORDER BY length(emails) DESC) AS name,
                string_agg(DISTINCT kind, '; ' ORDER BY kind) AS kind,
                string_agg(DISTINCT nullif(category, ''), '; ' ORDER BY nullif(category, '')) AS category,
                string_agg(DISTINCT nullif(legal_form, ''), '; ' ORDER BY nullif(legal_form, '')) AS legal_form,
