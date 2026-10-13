@@ -79,32 +79,47 @@ def _keys(row):
 
 
 def write_keys(rows, path):
-    """Each record's keys, one (record_id, key) pair per line."""
-    with open(path, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(["record_id", "key"])
+    """Each record's keys, one (rid, key) pair per line, gzipped, with the
+    record numbers in path + ".ids" as (rid, record_id). Only records with a
+    key get a number, and the grouping then works on numbers, not names."""
+    rid = 0
+    with gzip.open(path, "wt", newline="", encoding="utf-8", compresslevel=1) as handle, \
+            gzip.open(path + ".ids", "wt", newline="", encoding="utf-8", compresslevel=1) as ids:
+        writer, numbers = csv.writer(handle), csv.writer(ids)
+        writer.writerow(["rid", "key"])
+        numbers.writerow(["rid", "record_id"])
         for row in rows:
-            writer.writerows((row["record_id"], key) for key in set(_keys(row)))
+            keys = set(_keys(row))
+            if keys:
+                rid += 1
+                numbers.writerow((rid, row["record_id"]))
+                writer.writerows((rid, key) for key in keys)
 
 
-def group_in(db, keys_path, record_ids):
-    """Joins records that share a key, in DuckDB so that millions of records
-    fit in memory. Creates the table groups(record_id, group_id).
+def _read(path, columns):
+    return (f"read_csv('{path}', header=true, delim=',', quote='\"', escape='\"', "
+            f"compression='gzip', columns={columns})")
+
+
+def group_in(db, keys_path):
+    """Joins records that share a key, in DuckDB so that tens of millions of
+    records fit. Creates the table groups(record_id, group_id), holding only
+    the records joined to at least one other.
 
     Records and keys form a graph; each record's group is the smallest record
     number it can reach, found by passing the smallest number back and forth
-    through the keys until nothing changes."""
-    db.execute(f"""CREATE OR REPLACE TABLE ids AS
-                   SELECT record_id, row_number() OVER () AS rid FROM {record_ids}""")
+    through the keys until nothing changes. Keys are hashed to numbers to save
+    space; two different keys sharing a hash is vanishingly rare."""
+    keys = _read(keys_path, "{'rid': 'BIGINT', 'key': 'VARCHAR'}")
     db.execute(f"""CREATE OR REPLACE TABLE pairs AS
-                   SELECT p.key, i.rid FROM read_csv('{keys_path}', header=true, all_varchar=true, delim=',', quote='"', escape='"') p
-                   JOIN ids i USING (record_id)""")
+                   SELECT hash(key) AS key, key LIKE 'n:%' OR key LIKE 'c:%' AS named, rid
+                   FROM {keys}""")
     # A key shared by many records (an agent's email, a chain's website) says
     # nothing about which organisation a record is, so it joins nothing.
     db.execute(f"""CREATE OR REPLACE TABLE edges AS
                    SELECT key, rid FROM pairs WHERE key IN (
                        SELECT key FROM pairs GROUP BY key
-                       HAVING count(*) > 1 AND count(*) <= CASE WHEN key LIKE 'n:%' OR key LIKE 'c:%'
+                       HAVING count(*) > 1 AND count(*) <= CASE WHEN bool_or(named)
                                                                 THEN {MAX_SAME_NAME} ELSE {MAX_SHARED} END)""")
     db.execute("DROP TABLE pairs")
     db.execute("CREATE OR REPLACE TABLE comp AS SELECT DISTINCT rid, rid AS c FROM edges")
@@ -119,10 +134,15 @@ def group_in(db, keys_path, record_ids):
         db.execute("ALTER TABLE next RENAME TO comp")
         if not changed:
             break
+    db.execute("DROP TABLE edges")
+    ids = _read(keys_path + ".ids", "{'rid': 'BIGINT', 'record_id': 'VARCHAR'}")
+    db.execute(f"""CREATE OR REPLACE TABLE ids AS
+                   SELECT i.rid, i.record_id FROM {ids} i
+                   WHERE i.rid IN (SELECT rid FROM comp) OR i.rid IN (SELECT c FROM comp)""")
     db.execute("""CREATE OR REPLACE TABLE groups AS
-                  SELECT i.record_id, coalesce(g.record_id, i.record_id) AS group_id
-                  FROM ids i LEFT JOIN comp c USING (rid) LEFT JOIN ids g ON g.rid = c.c""")
-    for table in ("ids", "edges", "comp"):
+                  SELECT i.record_id, g.record_id AS group_id
+                  FROM comp c JOIN ids i USING (rid) JOIN ids g ON g.rid = c.c""")
+    for table in ("ids", "comp"):
         db.execute(f"DROP TABLE {table}")
 
 
@@ -132,12 +152,11 @@ def group(rows):
     rows = list(rows)
     db = _connect()
     with tempfile.TemporaryDirectory() as folder:
-        path = os.path.join(folder, "keys.csv")
+        path = os.path.join(folder, "keys.csv.gz")
         write_keys(rows, path)
-        db.execute("CREATE TABLE r (record_id VARCHAR)")
-        db.executemany("INSERT INTO r VALUES (?)", [(r["record_id"],) for r in rows])
-        group_in(db, path, "r")
-    return dict(db.execute("SELECT record_id, group_id FROM groups").fetchall())
+        group_in(db, path)
+        joined = dict(db.execute("SELECT record_id, group_id FROM groups").fetchall())
+    return {r["record_id"]: joined.get(r["record_id"], r["record_id"]) for r in rows}
 
 
 def _connect(out=None, work=""):
@@ -174,7 +193,7 @@ def combine(out, names):
     tens of millions fit on a small machine."""
     db = _connect(out, work="combine")
     files = [_source_path(out, n) for n in names if os.path.exists(_source_path(out, n))]
-    keys_path = os.path.join(out, "keys.csv.part")
+    keys_path = os.path.join(out, "keys.csv.gz.part")
 
     def rows():
         for path in files:
@@ -183,12 +202,9 @@ def combine(out, names):
                     yield {k: v or "" for k, v in row.items()}
 
     write_keys(rows(), keys_path)
-    group_in(db, keys_path, f"(SELECT DISTINCT record_id FROM read_csv('{keys_path}', header=true, "
-                            "all_varchar=true, delim=',', quote='\"', escape='\"'))")
+    group_in(db, keys_path)  # Only records joined to another get a group.
     os.remove(keys_path)
-    # Only records joined to another need a group; the rest are their own.
-    db.execute("DELETE FROM groups WHERE record_id = group_id AND group_id NOT IN "
-               "(SELECT group_id FROM groups WHERE record_id <> group_id)")
+    os.remove(keys_path + ".ids")
     listing = ", ".join("'" + f.replace("'", "''") + "'" for f in files)
     columns = ", ".join(f"r.{f}" for f in FIELDS)
     # Enrichment-only sources (owners, accounts) add to organisations found
