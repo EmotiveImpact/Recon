@@ -113,6 +113,9 @@ def _street(address):
     the part with a house number counts."""
     parts = [p for p in (address or "").split(",") if p.strip()]
     numbered = [p for p in parts if re.search(r"\d", p)]
+    # A bare house number before its street ("2, Hangleton Rd"): take the street.
+    numbered += [after for number, after in zip(parts, parts[1:])
+                 if re.fullmatch(r"\s*\d+[a-z]?\s*", number, re.I) and after not in numbered]
     street = " ".join(numbered or parts[-1:])
     return set(words.tokens(re.sub(r"\d+[a-z]?\b", " ", street.lower())))
 
@@ -137,12 +140,12 @@ class Rarity:
         self.rare_limit = max(3, self.total // 1000)
 
     def weight(self, word, local=()):
-        if word in local or self.vocab.is_trade(word) or word.isdigit():
-            return 0.5
+        if word in local or self.vocab.is_own_trade(word) or word.isdigit() or len(word) == 1:
+            return 0.5  # Single letters are initials ("B&H", "A.M.G"), which say little.
         return math.log((self.total + 1) / (self.counts[word] + 0.5)) + 1
 
     def distinctive(self, word, local=()):
-        return (word not in local and not self.vocab.is_trade(word) and not word.isdigit()
+        return (word not in local and not self.vocab.is_own_trade(word) and not word.isdigit()
                 and len(word) > 1 and self.counts[word] <= self.rare_limit)
 
     def names_with(self, found):
@@ -168,10 +171,14 @@ def _joined(found, other):
     return out
 
 
-def likeness(place_name, company_name, rarity, local=()):
+def likeness(place_name, company_name, rarity, local=(), alone=None):
     """(0 to 1, shared rare words): weighted overlap of the two names. Words in
     `local` (the town, the street, the area) count for little and are never
-    rare."""
+    rare. A word only one name has counts for little only if it is in `alone`
+    (by default the same words): a shared "Marina" near Brighton Marina proves
+    nothing, but a Baker Street in the district does not explain away "Baker"
+    in APRIL BAKER LTD."""
+    alone = local if alone is None else alone
     a, b = words.tokens(place_name), words.tokens(company_name)
     if not a or not b:
         return 0.0, []
@@ -181,8 +188,8 @@ def likeness(place_name, company_name, rarity, local=()):
     if numbers_a and numbers_b and numbers_a != numbers_b:
         return 0.0, []  # "Studio 7" is never "Studio 8".
     shared, either = set(a) & set(b), set(a) | set(b)
-    score = (sum(rarity.weight(w, local) for w in shared)
-             / sum(rarity.weight(w, local) for w in either))
+    common = sum(rarity.weight(w, local) for w in shared)
+    score = common / (common + sum(rarity.weight(w, alone) for w in either - shared))
     return score, sorted(w for w in shared if rarity.distinctive(w, local))
 
 
@@ -279,11 +286,12 @@ def _judge(place, company, rarity, where_is, nearby=()):
     `nearby` holds the street and area words of the place's district."""
     vocab = rarity.vocab
     towns = set(words.tokens(f"{place.get('town', '')} {company.get('town', '')}"))
-    local = towns | _street(place.get("address", "")) | set(nearby)
+    own = towns | _street(place.get("address", ""))
+    local = own | set(nearby)
     mine, theirs = words.tokens(place["name"]), words.tokens(company["name"])
-    if vocab.different_trades(mine, theirs):
-        return None  # "Luxe Nails" is not LUXE HAIR LTD.
-    score, rare = likeness(place["name"], company["name"], rarity, local)
+    if vocab.different_trades([w for name in _names(place) for w in words.tokens(name)], theirs):
+        return None  # "Luxe Nails" is not LUXE HAIR LTD, nor is "Halo" when it is also "Halo Hair".
+    score, rare = likeness(place["name"], company["name"], rarity, local, own)
     closeness, where = _where(place, company, where_is)
     named = [w for w in mine if w not in towns]
     same_name = bool(named) and named == [w for w in theirs if w not in towns]
@@ -292,7 +300,7 @@ def _judge(place, company, rarity, where_is, nearby=()):
         # At the company's own address: the same name, or the same name apart
         # from trade words ("Creative Nails Spa", CREATIVE NAILS), or a close
         # name sharing a rare word.
-        core = lambda found: {w for w in found if w not in towns and not vocab.is_trade(w)}
+        core = lambda found: {w for w in found if w not in towns and not vocab.is_own_trade(w)}
         if same_name or (core(theirs) and core(mine) == core(theirs)):
             return SPOT + 1.0, how, closeness
         if rare and score >= SAME_SPOT:
@@ -369,8 +377,18 @@ def _named_by_register(place, index):
     return SPOT + 2.0, same[0], f"named by the {register or 'regulator'} register", SPOT
 
 
+def _names(place):
+    """Every name a business goes by: its own, then any other name a joined
+    source gave it."""
+    others = [n for n in (place.get("other_names") or "").split("; ") if n.strip()]
+    return [place["name"], *others]
+
+
 def wanted_postcodes(index):
     return {c["postcode"] for companies in index.values() for c in companies if c["postcode"]}
+
+
+COMPANY_FIELDS = ("company_number", "company_name", "company_type", "company_match")
 
 
 def mark(places, index, target=None, postcodes=None):
@@ -382,16 +400,31 @@ def mark(places, index, target=None, postcodes=None):
     where_is = _Map(places, postcodes)
     areas = district_words(places)
 
-    found = {}
+    for place in places:  # A rerun starts afresh, so a match it no longer makes goes.
+        for field in COMPANY_FIELDS:
+            place[field] = ""
+
+    found, known_as = {}, {}
     for i, place in enumerate(places):
         named = _named_by_register(place, index)
         if named:
             found[i] = named
             continue
         nearby = areas.get(text.postcode_district(place["postcode"]), ())
-        best = _best(place, candidates(place), rarity, where_is, nearby)
-        if best:
-            found[i] = best
+        tries, names = [], _names(place)
+        for name in names:
+            under = dict(place, name=name, other_names="; ".join(n for n in names if n != name))
+            best = _best(under, candidates(under), rarity, where_is, nearby)
+            if best:
+                tries.append((best, name))
+        if not tries:
+            continue
+        tries.sort(key=lambda t: -t[0][0])
+        (score, company, how, closeness), name = tries[0]
+        if len({b[1]["number"] for b, _ in tries if score - b[0] < CLEAR_LEAD}) > 1:
+            continue  # Two of its names point to two companies.
+        found[i] = (score, company, how, closeness)
+        known_as[i] = name
 
     # One company, several places. The same name in several spots may be
     # branches, or unrelated businesses sharing a name, so only matches near
@@ -403,7 +436,7 @@ def mark(places, index, target=None, postcodes=None):
     for members in by_company.values():
         if len(members) < 2:
             continue
-        if len({tuple(words.tokens(places[i]["name"])) for i in members}) == 1:
+        if len({tuple(words.tokens(known_as.get(i, places[i]["name"]))) for i in members}) == 1:
             keep = [i for i in members if found[i][3] >= NEAR]
         else:
             at_office = sorted((i for i in members if found[i][3] == SPOT),
@@ -415,6 +448,11 @@ def mark(places, index, target=None, postcodes=None):
 
     for i, (score, company, how, closeness) in found.items():
         place = places[i]
+        name = known_as.get(i, place["name"])
+        if name != place["name"]:
+            # The name the company is registered under leads the row.
+            others = [n for n in _names(place) if n != name]
+            place["name"], place["other_names"] = name, "; ".join(others)
         place["company_number"] = company["number"]
         place["company_name"] = company["name"]
         place["company_type"] = company["category"]

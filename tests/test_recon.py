@@ -497,6 +497,11 @@ class OvertureTests(unittest.TestCase):
         self.assertEqual(overture._category_columns({"categories"}),
                          ("categories.primary", "categories.alternate"))
 
+    def test_categories_that_found_nothing_are_named(self):
+        found = [places.blank(name="Glow Room", category=c)
+                 for c in TARGET.overture_categories() if c != "barber"]
+        self.assertEqual(overture.unused_categories(TARGET, found), ["barber"])
+
 
 class ListedEmailTests(unittest.TestCase):
     def test_post_only_rows_show_every_email_labelled(self):
@@ -646,6 +651,57 @@ class RealMatchMistakeTests(unittest.TestCase):
         at_office = places.blank(name="Lazarus Hair", postcode="BN1 1AA", town="Brighton")
         self.assertEqual(companies_house.mark([near, other, at_office], index), 1)
         self.assertEqual(at_office["company_number"], "1")
+
+    def test_a_business_is_matched_by_any_of_its_names(self):
+        index = _index(_registered("1", "MAGIC TATTOO BRIGHTON LTD", "BN1 1YA", "brighton"))
+        place = places.blank(name="Lazerase Laser Tattoo Removal", other_names="Magic Tattoo",
+                             postcode="BN1 1YA", town="Brighton")
+        self.assertEqual(companies_house.mark([place], index), 1)
+        self.assertEqual(place["company_match"], "same name, same postcode")
+        self.assertEqual((place["name"], place["other_names"]),
+                         ("Magic Tattoo", "Lazerase Laser Tattoo Removal"))
+
+    def test_another_trade_word_in_a_company_name_is_a_surname(self):
+        # Brighton: a salon called "April" (April De Austin) was matched to
+        # APRIL BAKER LTD down the road, as if "Baker" were the trade.
+        index = _index(_registered("1", "APRIL BAKER LTD", "BN1 1HW", "brighton"))
+        place = places.blank(name="April", postcode="BN1 6LF", town="Brighton")
+        self.assertEqual(companies_house.mark([place], index, TARGET), 0)
+        bakery = Target.load(os.path.join(HERE, "..", "targets", "saleane-uk.json"))
+        bakery.sectors = {"Bakeries": {"overture": ["bakery"], "osm": [], "sic": []}}
+        self.assertEqual(companies_house.mark([place], index, bakery), 1)
+
+    def test_a_street_elsewhere_in_the_district_does_not_hide_a_surname(self):
+        # The same mistake came back because a salon nearby is on Baker Street.
+        index = _index(_registered("1", "APRIL BAKER LTD", "BN1 1HW", "brighton"))
+        place = places.blank(name="April", postcode="BN1 6LF", town="Brighton")
+        neighbour = places.blank(name="Profile Aesthetics", postcode="BN1 4JN",
+                                 address="Baker Street", town="Brighton")
+        self.assertEqual(companies_house.mark([place, neighbour], index, TARGET), 0)
+
+    def test_a_rerun_drops_matches_it_no_longer_makes(self):
+        place = places.blank(name="April", postcode="BN1 6LF", town="Brighton",
+                             company_number="1", company_name="APRIL BAKER LTD",
+                             company_type="Private Limited Company", company_match="old")
+        self.assertEqual(companies_house.mark([place], _index(), TARGET), 0)
+        self.assertEqual(place["company_number"] + place["company_match"], "")
+
+    def test_brighton_matches_kept_after_the_surname_fix(self):
+        index = _index(_registered("1", "SUN KISSED (HANGLETON) LTD", "BN3 7LU", "hove"),
+                       _registered("2", "FADED BARBERS B&H LTD", "BN1 2HE", "brighton"))
+        tanning = places.blank(name="Sunkissed Hair Tanning & Beauty Salon",
+                               address="2, Hangleton Rd", postcode="BN3 7LU", town="Hove")
+        barber = places.blank(name="Faded barbers Brighton", address="57 Preston St",
+                              postcode="BN1 2HE", town="Brighton")
+        self.assertEqual(companies_house.mark([tanning, barber], index, TARGET), 2)
+
+    def test_every_name_says_which_trade_a_business_is_in(self):
+        # UK sample: "Halo", also listed as "Halo Hair & Aesthetics", was
+        # matched to HALO NAILS LTD in its district.
+        index = _index(_registered("1", "HALO NAILS LTD", "G31 2AA", "glasgow"))
+        place = places.blank(name="Halo", other_names="Halo Hair & Aesthetics",
+                             postcode="G31 1QN", town="Glasgow")
+        self.assertEqual(companies_house.mark([place], index, TARGET), 0)
 
     def test_a_shared_rare_word_is_enough_nearby(self):
         index = _index(_registered("1", "LAZARUS HAIR LTD", "BN1 1AA", "brighton"))
@@ -878,6 +934,17 @@ class NearbyMergeTests(unittest.TestCase):
         combined = merge.combine([_spot("Reach Physiotherapy", 50.8235, -0.1402),
                                   _spot("Reach Physiotherapy", 50.82351, -0.14021)])
         self.assertEqual(len(combined), 1)
+
+    def test_the_name_most_sources_give_leads(self):
+        # Brighton: a tattoo shop and the laser removal service it runs share
+        # a phone; two sources call it Magic Tattoo, one by the service's name.
+        laser = _spot("Lazerase Laser Tattoo Removal", 50.8262, -0.1385, phone="01273 697681")
+        shop = _spot("Magic Tattoo", 50.82621, -0.13851, phone="01273 697681")
+        osm = _spot("Magic Tattoo", 50.82622, -0.13852, source="osm")
+        combined = merge.combine([laser, shop], [osm])
+        self.assertEqual(len(combined), 1)
+        self.assertEqual(combined[0]["name"], "Magic Tattoo")
+        self.assertEqual(combined[0]["other_names"], "Lazerase Laser Tattoo Removal")
 
     def test_same_name_far_apart_is_two_branches(self):
         combined = merge.combine([_spot("Glow Room", 50.8235, -0.1402)],

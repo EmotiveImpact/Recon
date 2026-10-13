@@ -81,7 +81,7 @@ Copy `targets/saleane-uk.json`, give it the project name and country, and list t
 | `email_pattern`, `mail_server` | The pattern the business's addresses follow, and whether its domain takes email |
 | `contact_name`, `contact_role` | One director, for companies we may email |
 | `contact_email`, `contact_email_check`, `contact_email_confidence`, `contact_email_reason`, `contact_email_basis` | That person's address (published, or worked out from the pattern), its check, score and reason |
-| `source`, `legal_name` | Where the row came from (`overture`, `osm`, a register such as `cqc`, or several), and the operating organisation a register names |
+| `source`, `legal_name`, `other_names` | Where the row came from (`overture`, `osm`, a register such as `cqc`, or several), the operating organisation a register names, and any other names the joined sources gave the business |
 
 ## Credits
 

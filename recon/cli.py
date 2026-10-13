@@ -33,6 +33,10 @@ def step_places(target, store, args):
         print("Reading Overture Maps…")
         found, release = overture.fetch(target, release=args.overture_release)
         print(f"  {len(found):,} places from Overture release {release}")
+        unused = overture.unused_categories(target, found)
+        if unused:
+            print("  No places in these categories, which Overture may have renamed "
+                  "('recon categories' finds the new names): " + ", ".join(unused))
         groups.append(found)
     if not args.skip_osm:
         print("Reading OpenStreetMap…")

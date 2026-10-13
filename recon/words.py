@@ -56,17 +56,20 @@ class Vocabulary:
 
     def __init__(self, target=None, names=(), common_share=0.02, common_min=5):
         self.group = {}  # word -> trade group, or "" for a trade word in no group.
+        self.own = set()  # The trade groups the target is about; empty means all.
         for group, words in _load_trades().items():
             self._add(words, "" if group == "generic" else group)
         if target is not None:
             for group, words in (getattr(target, "trade_words", None) or {}).items():
                 self._add(words, "" if group == "generic" else group)
+                self.own.add("" if group == "generic" else group)
             described = [*target.overture_categories(), *target.sectors]
             described += [value for _, value in target.osm_tags()]
             for phrase in described:
                 for word in re.split(r"[^a-z0-9]+", phrase.lower()):
                     if word and not word.isdigit():
-                        self.group.setdefault(fold(word), "")
+                        self.own.add(self.group.setdefault(fold(word), ""))
+            self.own.discard("")
         if names:
             counts = collections.Counter()
             for name in names:
@@ -83,6 +86,13 @@ class Vocabulary:
 
     def is_trade(self, word):
         return fold(word) in self.group
+
+    def is_own_trade(self, word):
+        """A trade word of the target's own trades, or a word of no trade in
+        particular. In a run of salons "Baker" in APRIL BAKER LTD is most
+        likely a surname, so it counts as much as any other word."""
+        group = self.group.get(fold(word))
+        return group is not None and (not group or not self.own or group in self.own)
 
     def trades(self, words):
         """The trade groups a name's words point to."""

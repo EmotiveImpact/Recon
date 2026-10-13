@@ -4,24 +4,25 @@ One plan, combining the first real runs, the research into free data sources (th
 
 ## Done
 
-- ~~**First real run**~~ of `targets/saleane-uk.json`, 13 October 2026, in the cloud: 153,804 UK businesses, 17,957 may be emailed. Numbers in THINKING.md.
+- ~~**First real run**~~ of `targets/saleane-uk.json`, 13 October 2026, in the cloud: 174,533 UK businesses, 20,702 may be emailed. Numbers in THINKING.md.
 - ~~**Email finder**~~: patterns, named directors, mail record and mailbox checks, confidence scores, `recon find`, optional Hunter.
 - ~~**Every contact detail**~~: all emails (personal ones labelled), phones (mobiles marked), social links, from Overture, OpenStreetMap and the websites.
 - ~~**OpenStreetMap from the daily download**~~, and duplicates joined by place and name.
 - ~~**Company matching that rarely guesses wrong**~~: rare shared words, real distances to registered offices, checked by hand on Brighton and Bath.
 - ~~**Any kind of business**~~: trade words come from `recon/trades.json` and the target list, not the code.
+- ~~**SALEANE's categories**~~ renamed to Overture's September 2026 names (spas alone was missing about 14,000 places).
 - ~~**Open registers**~~: the CQC directory as a preset; any open CSV by naming its columns.
 - ~~**Full free-mail and throwaway lists**~~.
 
 ## Next, in order
 
 1. **Postal export.** Most businesses are "post only" (88% across the UK), so the post campaign is the bigger one. Lay out names and addresses for a mail merge or a postcard printer.
-2. **Companies House API key** (free; Edem registers for one). It switches on named directors for the 17,957 companies, which is what makes a cold email land.
+2. **Companies House API key** (free; Edem registers for one). It switches on named directors for the 20,702 companies, which is what makes a cold email land.
 3. **Suppression list**: one shared file of businesses and addresses that asked not to be contacted, checked by every export. Needed before any sending.
 4. **Mailbox checks from a small rented server** with port 25 open (a few pounds a month): run `recon verify --smtp-from` there, and record how many guessed addresses are confirmed.
 5. **Second look at unmatched businesses whose website says "Ltd"**: 17% of Brighton homepages mention Ltd or Limited, and 4% give a company number. Matching those by the number on the site is near certain.
 6. **More registers, one per trade as needed**: the Food Standards Agency's hygiene ratings (every café, restaurant and takeaway, Open Government Licence) for food projects; council special treatment licences for massage, nails and tattoo where a council publishes them openly.
-7. **Tune the categories** for each new business type with `recon categories`, since Overture's names change between releases.
+7. **Check the categories of every business type** against the current Overture release, starting with the website's 31 ready-made types. The places step now names any category that found nothing, and `recon categories` finds the new names.
 8. **Instagram handles** pulled out of the `socials` column, for direct messages and ad audiences.
 9. **Scoring**: rank businesses by fit (own website, several staff, in a city we focus on).
 10. **Names from the business's own site** (a "meet the team" page or its structured data) for companies whose directors don't match, and for US businesses.

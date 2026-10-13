@@ -10,7 +10,7 @@ import hashlib
 import math
 import re
 
-from . import text
+from . import text, words
 from .words import Vocabulary
 
 # Columns holding several values: every source's values are kept.
@@ -200,17 +200,33 @@ def _phone_flags(place):
         place["mobile_only"] = "yes" if all(k == "mobile" for k in kinds) else ""
 
 
+def _lead_first(members, everything):
+    """The name most of the joined records give leads, ahead of the source
+    order: a tattoo shop listed as "Magic Tattoo" by two sources and as the
+    laser removal service it runs ("Lazerase Laser Tattoo Removal", same
+    phone) by a third is Magic Tattoo. The other names are kept beside it."""
+    same = {}
+    for i in members:
+        same.setdefault(tuple(words.tokens(everything[i]["name"])), []).append(i)
+    ranked = sorted(same.values(), key=len, reverse=True)  # Ties keep source order.
+    lead = ranked[0][0]
+    others = [everything[group[0]]["name"] for group in ranked[1:]]
+    return [lead] + [i for i in members if i != lead], others
+
+
 def combine(*groups, target=None):
     everything = sorted((p for group in groups for p in group),
                         key=lambda p: SOURCE_ORDER.get(p["source"], 9))
     vocab = Vocabulary(target, [p["name"] for p in everything])
     combined = []
     for members in _groups(everything, vocab):
+        members, others = _lead_first(members, everything)
         kept = everything[members[0]]
         for i in members[1:]:
             _absorb(kept, everything[i])
         if len(members) > 1:
             _phone_flags(kept)
+            kept["other_names"] = "; ".join(others)
         kept["key"] = _short_hash(match_key(kept) or kept["source"] + kept["source_id"])
         combined.append(kept)
     return combined
