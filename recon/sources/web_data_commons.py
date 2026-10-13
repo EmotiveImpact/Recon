@@ -47,8 +47,11 @@ def to_record(n, row):
     country = row["country"]
     own = row["site_kind"] == "own site"
     website = row["website"]
-    if website and not own and text.domain(website) == text.domain(row["page"]):
-        website = ""  # The listing site's own address, not the business's.
+    try:
+        if website and not own and text.domain(website) == text.domain(row["page"]):
+            website = ""  # The listing site's own address, not the business's.
+    except ValueError:  # A malformed address such as "http://[x".
+        website = ""
     if own and not website:
         website = "https://" + row["domain"]
     corporate = corporate_name(row["name"])

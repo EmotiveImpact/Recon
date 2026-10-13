@@ -205,12 +205,12 @@ def combine(out, names):
         FROM '{master}' WHERE group_id NOT IN (SELECT group_id FROM groups)
         UNION ALL BY NAME
         SELECT group_id,
-               first(nullif(name, '') ORDER BY length(emails) DESC) AS name,
+               first(name ORDER BY name = '', length(emails) DESC) AS name,
                string_agg(DISTINCT kind, '; ' ORDER BY kind) AS kind,
                string_agg(DISTINCT nullif(category, ''), '; ' ORDER BY nullif(category, '')) AS category,
                string_agg(DISTINCT nullif(legal_form, ''), '; ' ORDER BY nullif(legal_form, '')) AS legal_form,
-               first(nullif(address, '')) AS address, first(nullif(town, '')) AS town,
-               first(nullif(region, '')) AS region, first(nullif(postcode, '')) AS postcode,
+               any_value(nullif(address, '')) AS address, any_value(nullif(town, '')) AS town,
+               any_value(nullif(region, '')) AS region, any_value(nullif(postcode, '')) AS postcode,
                first(country) AS country,
                string_agg(DISTINCT nullif(website, ''), '; ' ORDER BY nullif(website, '')) AS website,
                {_merge('emails')} AS emails, {_merge('phones')} AS phones,
