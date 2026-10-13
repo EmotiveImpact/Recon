@@ -1,6 +1,7 @@
 """Search the master database (built by recon.master) for the website.
 
-The master database is a folder of parquet files, one per area:
+The master database is a folder of parquet files, one per area (a big area
+may instead be a folder of parts, england/part-0.parquet and so on):
 uk/england.parquet, us/ca.parquet, other/<country>.parquet and so on, each
 with one row per organisation. This module only reads them, with DuckDB.
 
@@ -106,17 +107,34 @@ class Directory:
             self._db.execute("SET enable_progress_bar = false")
         return self._db
 
+    def _area_files(self, group, area):
+        """A big area comes as a folder of parts (england/part-0.parquet ...),
+        because very large files don't reach every computer; prefer those."""
+        parts = sorted(glob.glob(os.path.join(self.folder, group, area, "part-*.parquet")))
+        if parts:
+            return parts
+        path = os.path.join(self.folder, group, area + ".parquet")
+        return [path] if os.path.exists(path) else []
+
+    def areas(self, group):
+        if group not in GROUPS:
+            raise ValueError("Choose the UK, the US or elsewhere")
+        root = os.path.join(self.folder or "", group)
+        found = {os.path.splitext(os.path.basename(p))[0] for p in glob.glob(os.path.join(root, "*.parquet"))}
+        found |= {os.path.basename(os.path.dirname(p)) for p in glob.glob(os.path.join(root, "*", "part-*.parquet"))}
+        return sorted(a for a in found if AREA.match(a))
+
     def files(self, group, area=""):
         if group not in GROUPS:
             raise ValueError("Choose the UK, the US or elsewhere")
         if area:
             if not AREA.match(area):
                 raise ValueError("Unknown area")
-            path = os.path.join(self.folder, group, area + ".parquet")
-            if not os.path.exists(path):
+            paths = self._area_files(group, area)
+            if not paths:
                 raise LookupError(f"No {area} in the master database")
-            return [path]
-        return sorted(glob.glob(os.path.join(self.folder, group, "*.parquet")))
+            return paths
+        return [p for a in self.areas(group) for p in self._area_files(group, a)]
 
     # What's in it -----------------------------------------------------------
 
@@ -131,7 +149,7 @@ class Directory:
                 with open(path, newline="", encoding="utf-8") as handle:
                     for row in csv.DictReader(handle):
                         counts[row["area"]] = {k: int(v or 0) for k, v in row.items() if k != "area"}
-            areas = [os.path.splitext(os.path.basename(p))[0] for p in self.files(group)]
+            areas = self.areas(group)
             groups[group] = [{"area": a, **counts.get(a, {})} for a in areas]
         return {"available": True, "folder": self.folder, "groups": groups,
                 "sources": self.sources()}
@@ -271,7 +289,7 @@ class Directory:
                 names.add("crown-dependencies")
             names.add(re.sub(r"[^a-z0-9]+", "-", (state or "").lower()).strip("-"))
             names.add((code or "").lower())
-        kept = [f for f in files if os.path.splitext(os.path.basename(f))[0] in names]
+        kept = [f for f in files if area_of(f) in names]
         return kept or files
 
     # Searching --------------------------------------------------------------
@@ -348,7 +366,7 @@ class Directory:
         groups = terms(one(query, "q"))
         named, named_params = self._match(groups, "name") if groups else ("false", [])
         found = f"""SELECT {', '.join(COLUMNS)}, {named} AS named,
-                           regexp_extract(filename, '([^/\\\\]+)\\.parquet$', 1) AS area
+                           regexp_extract(filename, '([^/\\\\]+?)([/\\\\]part-[0-9]+)?\\.parquet$', 1) AS area
                     FROM {SOURCE}{where}"""
         found_params = [*named_params, files, *params]
         if circle:  # Few rows, so place them all now and put the nearest first.
@@ -410,7 +428,7 @@ class Directory:
         if circle and not one(query, "area"):
             files = self._within(group, files, circle)
         inner = f"""SELECT {', '.join(COLUMNS)},
-                           regexp_extract(filename, '([^/\\\\]+)\\.parquet$', 1) AS area
+                           regexp_extract(filename, '([^/\\\\]+?)([/\\\\]part-[0-9]+)?\\.parquet$', 1) AS area
                     FROM {SOURCE}{where}"""
         placed, more = self._placed(group, inner, circle)
         order = "coalesce(emails, '') = '', " + ("miles, " if circle else "") + "name"
@@ -422,6 +440,12 @@ class Directory:
                           ORDER BY {order} LIMIT {EXPORT_LIMIT})
                     TO '{path}' (HEADER, DELIMITER ',')""", [files, *params, *more])
         return path
+
+
+def area_of(path):
+    """uk/wales.parquet -> wales; uk/england/part-2.parquet -> england."""
+    name = os.path.splitext(os.path.basename(path))[0]
+    return os.path.basename(os.path.dirname(path)) if re.fullmatch(r"part-\d+", name) else name
 
 
 def one(query, key, default=""):

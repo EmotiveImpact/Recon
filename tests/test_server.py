@@ -264,6 +264,23 @@ class DirectoryTests(unittest.TestCase):
 
 
 
+class AreaFileTests(unittest.TestCase):
+    def test_big_areas_come_as_a_folder_of_parts(self):
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder)
+        os.makedirs(os.path.join(folder, "uk", "england"))
+        for name in ("uk/wales.parquet", "uk/england.parquet", "uk/england/part-0.parquet",
+                     "uk/england/part-1.parquet"):
+            open(os.path.join(folder, name), "w").close()
+        found = directory.Directory(folder)
+        self.assertEqual(found.areas("uk"), ["england", "wales"])
+        self.assertEqual([os.path.relpath(p, folder) for p in found.files("uk", "england")],
+                         ["uk/england/part-0.parquet", "uk/england/part-1.parquet"])
+        self.assertEqual(len(found.files("uk")), 3)  # The parts win over the single file.
+        self.assertEqual(directory.area_of("/x/uk/england/part-1.parquet"), "england")
+        self.assertEqual(directory.area_of("/x/uk/wales.parquet"), "wales")
+
+
 class DashboardTests(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.mkdtemp()
