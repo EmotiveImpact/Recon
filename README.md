@@ -62,4 +62,4 @@ Contains Overture Maps data (CDLA Permissive 2.0), © OpenStreetMap contributors
 
 ## For the next agent
 
-Read [docs/THINKING.md](docs/THINKING.md) first, then [docs/RULES.md](docs/RULES.md) and [docs/NEXT.md](docs/NEXT.md). Run the tests with `python3 -m unittest discover -s tests -t .`; they need no internet.
+Read [docs/PURPOSE.md](docs/PURPOSE.md), [docs/HISTORY.md](docs/HISTORY.md), [docs/THINKING.md](docs/THINKING.md), [docs/RULES.md](docs/RULES.md) and [docs/NEXT.md](docs/NEXT.md), in that order. Run the tests with `python3 -m unittest discover -s tests -t .`; they need no internet.
