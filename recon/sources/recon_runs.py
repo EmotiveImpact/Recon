@@ -15,7 +15,7 @@ import os
 import re
 from datetime import date
 
-from . import read_csv, record
+from . import joined, read_csv, record
 
 SOURCE = {
     "name": "recon-runs",
@@ -63,6 +63,22 @@ def trade_lists(folder):
     return found
 
 
+def money(row):
+    """Size from the company's accounts, when the list carries it."""
+    found = []
+    if row.get("staff"):
+        found.append(f"{row['staff']} staff")
+    for column, label in (("turnover", "turnover"), ("net_assets", "net assets")):
+        try:
+            value = int(float(row.get(column) or "x"))
+        except ValueError:
+            continue
+        found.append(f"{label} {'-' if value < 0 else ''}£{abs(value):,}")
+    if row.get("size_band"):
+        found.append(f"{row['size_band']} company")
+    return found
+
+
 def rows(cache):
     lists = newest_lists(os.environ.get("RECON_RUNS", "out"))
     lists.update(trade_lists(os.environ.get("RECON_TRADES", "/mnt/project-files/master-db/trades")))
@@ -72,7 +88,7 @@ def rows(cache):
             can = row["contact_rule"] or "post only"
             yield record(
                 SOURCE, f"{slug}:{row['key']}", row["name"], other_name=row["other_names"],
-                kind=row["sector"].lower(), category=row["category"],
+                kind=row["sector"].lower(), category=joined(row["category"], *money(row), sep="; "),
                 legal_form=row["company_type"], address=row["address"], town=row["town"],
                 postcode=row["postcode"], country=country, website=row["website"],
                 emails=row["all_emails"] or row["email"], phones=row["all_phones"],
