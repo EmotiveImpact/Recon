@@ -86,7 +86,8 @@ def clean_emails(value):
         part = part.strip().strip(".").lower()
         if part.startswith("mailto:"):
             part = part[7:]
-        if part and contacts.valid_email(part) and part not in found:
+        if (part and contacts.valid_email(part) and not contacts.system_email(part)
+                and part not in found):
             found.append(part)
     return found
 

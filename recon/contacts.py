@@ -103,6 +103,19 @@ def _free_mail():
     return _free_mail.domains
 
 
+# Addresses that belong to website software rather than the business: error
+# reporting (Sentry), site builders' own systems, and do-not-reply senders.
+_SYSTEM_HOSTS = re.compile(r"(^|\.)sentry(\.io$|-)|(^|\.)(bugsnag|rollbar)\.(com|io)$|"
+                           r"wixpress\.com$|(^|\.)ingest\.")
+_SYSTEM_LOCAL = re.compile(r"^(no-?reply|do-?not-?reply|mailer-daemon|postmaster)$|^[0-9a-f]{32}$")
+
+
+def system_email(address):
+    """True for an address no person reads, such as an error-reporting key."""
+    local, _, host = (address or "").lower().partition("@")
+    return bool(_SYSTEM_HOSTS.search(host) or _SYSTEM_LOCAL.search(local))
+
+
 def valid_email(address):
     """True when an address could really exist and be read."""
     address = (address or "").strip().lower()

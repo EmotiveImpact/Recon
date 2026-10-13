@@ -29,6 +29,11 @@ class RecordTests(unittest.TestCase):
         self.assertTrue(r["fetched"])
         self.assertEqual(r["postcode"], "SW1A 1AA")
 
+    def test_system_addresses_are_dropped(self):
+        r = row(1, "X", country="GB", emails="605a7baede844d278b89dc95ae0a9123@sentry-elb-1.aws.com; "
+                "noreply@pipe.co.uk; info@pipe.co.uk; jo@sentryhomes.co.uk")
+        self.assertEqual(r["emails"], "info@pipe.co.uk; jo@sentryhomes.co.uk")
+
     def test_unknown_columns_are_refused(self):
         with self.assertRaises(ValueError):
             row(1, "X", favourite_colour="blue")

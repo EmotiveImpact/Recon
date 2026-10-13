@@ -106,7 +106,7 @@ def clean_candidates(page):
             continue
         if any(junk in email.split("@")[1] for junk in _JUNK_DOMAINS):
             continue
-        if not contacts.valid_email(email):
+        if not contacts.valid_email(email) or contacts.system_email(email):
             continue
         if email not in found:
             found.append(email)
