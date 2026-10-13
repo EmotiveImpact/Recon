@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import shutil
 import tempfile
 import threading
@@ -125,6 +126,23 @@ class ServerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.workspace.runs.start("saleane-uk", "companies",
                                       {"companies_house": ["../../etc/passwd"]})
+
+
+class WebsiteTests(unittest.TestCase):
+    def test_ready_made_business_types_use_real_overture_categories(self):
+        # A renamed category silently finds nothing, so every one the site offers
+        # must be in the saved list of Overture's current names.
+        web = os.path.join(HERE, "..", "web", "src")
+        with open(os.path.join(web, "categories.json"), encoding="utf-8") as handle:
+            counts = json.load(handle)["counts"]
+        known = set(counts["GB"]) | set(counts["US"])
+        with open(os.path.join(web, "library.ts"), encoding="utf-8") as handle:
+            library = handle.read()
+        offered = re.findall(r'preset\([^\[]*\[([^\]]*)\]', library)
+        self.assertGreater(len(offered), 25)
+        for names in offered:
+            for name in re.findall(r'"([^"]+)"', names):
+                self.assertIn(name, known)
 
 
 class HttpTests(unittest.TestCase):
