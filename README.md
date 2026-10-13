@@ -8,7 +8,7 @@ It uses free, open data only. Nothing is bought and nothing is scraped from Goog
 
 ## What it does
 
-1. **Finds businesses** in [Overture Maps](https://overturemaps.org) (open data from Microsoft, Meta, Amazon and others) and [OpenStreetMap](https://www.openstreetmap.org), then joins duplicates.
+1. **Finds businesses** in [Overture Maps](https://overturemaps.org) (open data from Microsoft, Meta, Amazon and others) and [OpenStreetMap](https://www.openstreetmap.org), then joins duplicates: records a few metres apart with alike names, or the same phone or website, become one row. OpenStreetMap comes from the country's daily download (2.6 GB for the UK, kept for a week in `data/osm/`), so no shared server is needed.
 2. **Marks UK companies** using the free [Companies House](https://download.companieshouse.gov.uk/en_output.html) monthly file.
 3. **Applies the contact rules** for the country. In the UK, companies and LLPs may be emailed; sole traders and partnerships get post only. See [docs/RULES.md](docs/RULES.md).
 4. **Gathers every contact detail**: all emails (personal Gmail and Hotmail ones labelled), all phone numbers (mobiles told apart from landlines) and all social links, for every business, so you can see the full picture. Who may be emailed is still decided by step 3.
@@ -20,7 +20,7 @@ It uses free, open data only. Nothing is bought and nothing is scraped from Goog
 ## Running it
 
 ```bash
-python3 -m pip install duckdb        # needed for Overture Maps
+python3 -m pip install duckdb        # needed for Overture Maps and OpenStreetMap
 # Download BasicCompanyDataAsOneFile from Companies House (about 470 MB, free)
 python3 -m recon run targets/saleane-uk.json --companies-house BasicCompanyData-2026-10-01.zip
 ```

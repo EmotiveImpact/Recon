@@ -34,7 +34,8 @@ def step_places(target, store, args):
         groups.append(found)
     if not args.skip_osm:
         print("Reading OpenStreetMap…")
-        found = osm.fetch(target)
+        found = osm.fetch(target, extract=args.osm_extract or None,
+                          folder=os.path.join("data", "osm"), overpass=args.osm_overpass)
         print(f"  {len(found):,} places from OpenStreetMap")
         groups.append(found)
     combined = merge.combine(*groups)
@@ -167,6 +168,11 @@ def main(argv=None):
     parser.add_argument("--overture-release", help="defaults to the newest")
     parser.add_argument("--skip-overture", action="store_true")
     parser.add_argument("--skip-osm", action="store_true")
+    parser.add_argument("--osm-extract", nargs="*", default=[],
+                        help="read these .osm.pbf files instead of downloading the country's "
+                             "OpenStreetMap extract (kept in data/osm/ for a week)")
+    parser.add_argument("--osm-overpass", action="store_true",
+                        help="ask the public Overpass API instead of reading an extract")
     parser.add_argument("--can-email-only", action="store_true",
                         help="only read the websites of businesses we may email "
                              "(by default every website is read, so you see every address)")

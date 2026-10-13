@@ -680,5 +680,96 @@ class PlacesFileTests(unittest.TestCase):
             self.assertEqual(places.read(path)[0]["name"], "Café Lumière")
 
 
+def _spot(name, lat, lon, source="overture", **values):
+    return places.blank(name=name, lat=lat, lon=lon, source=source,
+                        source_id=f"{source}-{name}-{lat}", **values)
+
+
+class NearbyMergeTests(unittest.TestCase):
+    def test_nearby_alike_names_join(self):
+        pairs = [("Taper Barber", "Taper Barbers"), ("CityBarbers", "City Barbers"),
+                 ("MaxOliver. Brighton", "Max Oliver"), ("Meds Barbers", "Med's Barber"),
+                 ("Wolf and Dagger", "Wolf & Dagger Tattoo"), ("Zen Zone Brighton", "Zen Zone"),
+                 ("The Beauty Room", "The Beauty Rooms")]
+        for a, b in pairs:
+            combined = merge.combine([_spot(a, 50.8235, -0.1402, town="Brighton")],
+                                     [_spot(b, 50.82355, -0.14025, source="osm")])
+            self.assertEqual(len(combined), 1, f"{a} / {b}")
+            self.assertEqual(combined[0]["source"], "overture+osm")
+
+    def test_neighbours_in_other_trades_stay_apart(self):
+        combined = merge.combine([_spot("Luxe Nails", 50.8235, -0.1402)],
+                                 [_spot("Luxe Hair", 50.82352, -0.14021, source="osm")])
+        self.assertEqual(len(combined), 2)
+
+    def test_trade_words_alone_are_not_a_name(self):
+        combined = merge.combine([_spot("House of Hair", 50.8235, -0.1402)],
+                                 [_spot("Hair Studio", 50.82352, -0.14021, source="osm")])
+        self.assertEqual(len(combined), 2)
+
+    def test_street_name_is_not_a_shared_name(self):
+        a = _spot("Girl Talk Southwick Square", 50.8342, -0.2368, address="35 Southwick Square")
+        b = _spot("Southwick Barbers", 50.83447, -0.23714, source="osm", address="Southwick Square")
+        self.assertEqual(len(merge.combine([a], [b])), 2)
+
+    def test_same_name_far_apart_is_two_branches(self):
+        combined = merge.combine([_spot("Glow Room", 50.8235, -0.1402)],
+                                 [_spot("Glow Room", 50.8335, -0.1402, source="osm")])
+        self.assertEqual(len(combined), 2)
+
+    def test_same_phone_or_home_page_joins_different_names(self):
+        a = _spot("Masters Barbershop", 50.8285, -0.1356, phone="01273 600510")
+        b = _spot("Master Wheelers", 50.82855, -0.13566, source="osm",
+                  all_phones="01273 600510 (landline)")
+        self.assertEqual(len(merge.combine([a], [b])), 1)
+        a = _spot("Poppy The Hair Fairy", 50.8257, -0.1492, website="http://www.waters.co.uk/")
+        b = _spot("Waters Hairstylists", 50.82564, -0.14909, source="osm",
+                  website="https://waters.co.uk")
+        self.assertEqual(len(merge.combine([a], [b])), 1)
+
+    def test_pages_on_one_shopping_centre_site_stay_apart(self):
+        a = _spot("Glow Nails", 54.7771, -1.5749, website="https://centre.co.uk/stores/glow/")
+        b = _spot("Fade Barbers", 54.77712, -1.57491, source="osm",
+                  website="https://centre.co.uk/stores/fade/")
+        self.assertEqual(len(merge.combine([a], [b])), 2)
+
+    def test_mobile_only_follows_the_joined_numbers(self):
+        a = _spot("Glow Room", 50.8235, -0.1402, all_phones="07700 900123 (mobile)",
+                  mobile_only="yes")
+        b = _spot("Glow Room", 50.82352, -0.14021, source="osm",
+                  all_phones="020 7946 0000 (landline)")
+        joined = merge.combine([a], [b])[0]
+        self.assertEqual(joined["mobile_only"], "")
+        self.assertIn("020 7946 0000 (landline)", joined["all_phones"])
+
+
+class OsmExtractTests(unittest.TestCase):
+    def test_every_country_with_a_box_has_an_extract(self):
+        from recon.target import COUNTRY_BOX
+        for country in COUNTRY_BOX:
+            self.assertIn(country, osm.EXTRACTS)
+
+    def test_fresh_download_is_reused(self):
+        with tempfile.TemporaryDirectory() as folder:
+            name = os.path.basename(osm.EXTRACTS["GB"][0][0])
+            with open(os.path.join(folder, name), "wb") as handle:
+                handle.write(b"pbf")
+            self.assertEqual(osm.extract_files("GB", folder), [os.path.join(folder, name)])
+
+    def test_unknown_country_says_what_to_do(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaises(SystemExit) as raised:
+                osm.extract_files("FR", folder)
+        self.assertIn("--osm-extract", str(raised.exception))
+
+    def test_way_from_an_extract_becomes_a_place(self):
+        place = osm.to_place(TARGET, {"type": "way", "id": 146749751, "lat": 54.7771,
+                                      "lon": -1.5749, "tags": {
+            "shop": "hairdresser", "name": "Morley's Barbers", "addr:postcode": "DH1 3UL",
+            "addr:street": "High Street", "addr:city": "Durham"}})
+        self.assertEqual(place["source_id"], "way/146749751")
+        self.assertEqual(place["postcode"], "DH1 3UL")
+
+
 if __name__ == "__main__":
     unittest.main()

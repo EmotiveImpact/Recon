@@ -6,6 +6,7 @@ out/
 *.xlsx
 *.zip
 *.parquet
+*.pbf
 *.jsonl
 !tests/**
 __pycache__/
