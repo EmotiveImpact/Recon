@@ -82,6 +82,14 @@ class SourceRuleTests(unittest.TestCase):
         self.assertFalse(care_inspectorate_scotland.corporate({**base, "CareService": "Child Minding",
                                                                "ServiceProvider": "Care Ltd"}))
 
+    def test_cqc(self):
+        from recon.sources import cqc
+        self.assertTrue(cqc.corporate("Square Mile Dental Centre Limited"))
+        self.assertTrue(cqc.corporate("Leeds Teaching Hospitals NHS Trust"))
+        self.assertFalse(cqc.corporate("Dr A Patel and Partners"))
+        self.assertFalse(cqc.corporate("St Mary's Trust"))
+        self.assertEqual(cqc.kind_of("Nursing homes|Residential homes"), "care home")
+
     def test_every_loader_describes_its_source(self):
         for name, loader in sources.registry().items():
             for key in ("name", "title", "country", "url", "licence"):

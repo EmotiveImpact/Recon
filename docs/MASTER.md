@@ -36,7 +36,7 @@ The rules in RULES.md, applied per register and per legal form:
 
 ## Registers left out on purpose
 
-The ICO register of fee payers (its emails are named people, and its licence excludes personal data), the business rates valuation list (licensed for rating only), the Scottish charity register (bans direct marketing), anything scraped from Google Maps, Yelp or LinkedIn, breached data, and anything under a non-commercial licence. Web Data Commons is waiting on Edem's decision because it states no licence.
+Edem's 2025 Lead Vault lists (scraped from Google Maps; the workspace's safety check blocks loading them), the ICO register of fee payers (its emails are named people, and its licence excludes personal data), the business rates valuation list (licensed for rating only), the Scottish charity register (bans direct marketing), anything scraped from Google Maps, Yelp or LinkedIn, breached data, and anything under a non-commercial licence. Web Data Commons is waiting on Edem's decision because it states no licence.
 
 ## Building it
 
