@@ -10,7 +10,7 @@ import unittest
 import zipfile
 
 from recon import (companies_house, dns, emails, finder, hunter, mailbox, merge, osm,
-                   patterns, people, places, rules, text, verify)
+                   overture, patterns, people, places, rules, text, verify)
 from recon.target import Target
 
 HERE = os.path.dirname(__file__)
@@ -463,6 +463,46 @@ class FinderTests(unittest.TestCase):
         ranked, shared = finder.lookup("https://www.glowroom.co.uk", "Sarah Jones", crawl, mx)
         self.assertEqual(ranked[0][0], "s.jones@glowroom.co.uk")
         self.assertEqual(shared, ["info@glowroom.co.uk"])
+
+
+class OvertureTests(unittest.TestCase):
+    def test_row_with_listed_email_and_socials(self):
+        row = ("o1", "Glow Room", "nail_salon", ["beauty_salon"], ["https://glowroom.co.uk"],
+               ["+44 20 7946 0000"], ["Glow@gmail.com", "info@glowroom.co.uk"],
+               ["https://www.instagram.com/glowroom"], "1 High St", "London", "SW1A 1AA",
+               51.5, -0.1)
+        place = overture.to_place(TARGET, row)
+        self.assertEqual(place["email"], "info@glowroom.co.uk")
+        self.assertEqual(place["email_found_on"], "overture")
+        self.assertEqual(place["socials"], "https://www.instagram.com/glowroom")
+
+    def test_both_category_column_names(self):
+        self.assertEqual(overture._category_columns({"taxonomy"}),
+                         ("taxonomy.primary", "taxonomy.alternates"))
+        self.assertEqual(overture._category_columns({"categories"}),
+                         ("categories.primary", "categories.alternate"))
+
+
+class ListedEmailTests(unittest.TestCase):
+    def test_listed_email_is_dropped_for_post_only_rows(self):
+        place = _company(contact_rule=rules.POST_ONLY, email="jo@gmail.com",
+                         email_found_on="overture")
+        finder.fill([place], {})
+        self.assertEqual(place["email"], "")
+
+    def test_listed_email_scores_and_is_upgraded_when_also_on_the_site(self):
+        listed = _company(email="info@glowroom.co.uk", email_found_on="overture")
+        finder.fill([listed], {})
+        self.assertEqual((listed["email_basis"], listed["email_confidence"]), ("overture", 75))
+        found = {"glowroom.co.uk": {"info@glowroom.co.uk": "https://glowroom.co.uk/contact"}}
+        finder.fill([listed], found)
+        self.assertEqual((listed["email_basis"], listed["email_confidence"]), ("published", 90))
+
+    def test_own_domain_on_the_site_beats_a_listed_free_mail_address(self):
+        place = _company(email="glowroom@gmail.com", email_found_on="overture")
+        found = {"glowroom.co.uk": {"hello@glowroom.co.uk": "https://glowroom.co.uk/"}}
+        finder.fill([place], found)
+        self.assertEqual(place["email"], "hello@glowroom.co.uk")
 
 
 class VerifyTests(unittest.TestCase):

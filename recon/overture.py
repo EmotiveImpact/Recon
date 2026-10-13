@@ -8,6 +8,7 @@ import re
 import urllib.request
 
 from . import places, text
+from .emails import best_email
 
 BUCKET = "https://overturemaps-us-west-2.s3.amazonaws.com"
 
@@ -30,13 +31,32 @@ def _connect():
         raise SystemExit("This step needs DuckDB: pip install duckdb") from error
     db = duckdb.connect()
     for statement in ("INSTALL spatial", "LOAD spatial", "INSTALL httpfs", "LOAD httpfs",
-                      "SET s3_region='us-west-2'"):
+                      "SET s3_region='us-west-2'", "SET enable_progress_bar=false",
+                      # The bucket is public. An empty key stops any AWS keys on the
+                      # computer being sent, which the bucket would refuse.
+                      "CREATE SECRET overture (TYPE s3, KEY_ID '', SECRET '', "
+                      "REGION 'us-west-2', SCOPE 's3://overturemaps-us-west-2')"):
         db.execute(statement)
     return db
 
 
 def _source(release):
     return f"s3://overturemaps-us-west-2/release/{release}/theme=places/type=place/*"
+
+
+def _columns(db, release):
+    """Column names in this release. Overture renames things now and then."""
+    return {row[0] for row in db.execute(
+        f"DESCRIBE SELECT * FROM read_parquet('{_source(release)}', hive_partitioning=1)"
+    ).fetchall()}
+
+
+def _category_columns(columns):
+    """(primary, alternates) expressions. From release 2026-09-23.1 the
+    'categories' column became 'taxonomy', with 'alternate' renamed 'alternates'."""
+    if "taxonomy" in columns:
+        return "taxonomy.primary", "taxonomy.alternates"
+    return "categories.primary", "categories.alternate"
 
 
 def _area(target):
@@ -53,10 +73,11 @@ def categories(target, words, release=None):
     """Count places per category whose name contains any of the words.
     Use it to find Overture's exact category names for a new target list."""
     release = release or latest_release()
-    likes = " OR ".join("categories.primary ILIKE '%" + w.replace("'", "''") + "%'"
-                        for w in words)
-    return _connect().execute(
-        f"""SELECT categories.primary AS category, count(*) AS places
+    db = _connect()
+    primary, _ = _category_columns(_columns(db, release))
+    likes = " OR ".join(f"{primary} ILIKE '%" + w.replace("'", "''") + "%'" for w in words)
+    return db.execute(
+        f"""SELECT {primary} AS category, count(*) AS places
             FROM read_parquet('{_source(release)}', hive_partitioning=1)
             WHERE {_area(target)} AND ({likes})
             GROUP BY 1 ORDER BY 2 DESC"""
@@ -67,28 +88,42 @@ def fetch(target, release=None, min_confidence=0.5):
     """Every place in the target's sectors and country."""
     release = release or latest_release()
     wanted = _sql_list(target.overture_categories())
-    rows = _connect().execute(
-        f"""SELECT id, names.primary, categories.primary, categories.alternate,
-                   websites, phones, addresses[1].freeform, addresses[1].locality,
+    db = _connect()
+    columns = _columns(db, release)
+    primary, alternates = _category_columns(columns)
+    emails = "emails" if "emails" in columns else "NULL"
+    socials = "socials" if "socials" in columns else "NULL"
+    still_open = ("AND coalesce(operating_status, '') <> 'permanently_closed'"
+                  if "operating_status" in columns else "")
+    rows = db.execute(
+        f"""SELECT id, names.primary, {primary}, {alternates},
+                   websites, phones, {emails}, {socials},
+                   addresses[1].freeform, addresses[1].locality,
                    addresses[1].postcode, ST_Y(geometry), ST_X(geometry)
             FROM read_parquet('{_source(release)}', hive_partitioning=1)
             WHERE {_area(target)}
-              AND confidence >= {float(min_confidence)}
-              AND (list_contains({wanted}, categories.primary)
-                   OR list_has_any({wanted}, categories.alternate))"""
+              AND confidence >= {float(min_confidence)} {still_open}
+              AND (list_contains({wanted}, {primary})
+                   OR list_has_any({wanted}, {alternates}))"""
     ).fetchall()
+    return [p for p in (to_place(target, row) for row in rows) if p], release
 
-    found = []
-    for (pid, name, primary, alternates, websites, phones, street, town, code,
-         lat, lon) in rows:
-        sector = target.overture_sector(primary, alternates)
-        if not sector or not name:
-            continue
-        found.append(places.blank(
-            name=name, sector=sector, category=primary, address=street, town=town,
-            postcode=text.postcode(code or street, target.country),
-            lat=round(lat, 6), lon=round(lon, 6),
-            website=next((w for w in websites or [] if text.own_website(w)), ""),
-            phone=(phones or [""])[0], source="overture", source_id=pid,
-        ))
-    return found, release
+
+def to_place(target, row):
+    """One Overture row (in the order fetch() selects) as a place, or None."""
+    (pid, name, primary, alternates, websites, phones, emails, socials, street, town, code,
+     lat, lon) = row
+    sector = target.overture_sector(primary, alternates)
+    if not sector or not name:
+        return None
+    website = next((w for w in websites or [] if text.own_website(w)), "")
+    email = best_email([e.strip().lower() for e in emails or [] if "@" in (e or "")],
+                       text.domain(website))
+    return places.blank(
+        name=name, sector=sector, category=primary, address=street, town=town,
+        postcode=text.postcode(code or street, target.country),
+        lat=round(lat, 6), lon=round(lon, 6), website=website,
+        phone=(phones or [""])[0], source="overture", source_id=pid,
+        email=email, email_found_on="overture" if email else "",
+        socials=" ".join(dict.fromkeys(s for s in socials or [] if s)),
+    )

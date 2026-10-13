@@ -66,6 +66,7 @@ Copy `targets/saleane-uk.json`, give it the project name and country, and list t
 | `name`, `sector`, `category` | The business and how we classified it |
 | `address`, `town`, `postcode`, `lat`, `lon` | Where it is |
 | `website`, `phone` | From the map data; booking-platform and social links are left out |
+| `socials` | The business's social links (Instagram, Facebook and so on) from the map data |
 | `company_number`, `company_name`, `company_type` | Its Companies House record, when matched |
 | `contact_rule` | `can email`, `post only` or `check local rules` |
 | `email`, `email_found_on`, `email_check` | The business's main email, the page it was on, and the check result |

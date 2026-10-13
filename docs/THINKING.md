@@ -25,6 +25,8 @@ Edem then asked for it to live in its own repository and to serve **all** his pr
 | Build the email finders' free techniques ourselves rather than add their tools | ColdReach, MailScout and theHarvester all do some of this, but each brings dependencies and a young or quiet codebase. The ideas (patterns, catch-all detection, mail record checks) are a few hundred lines of standard library. |
 | Reacher stays optional and outside Recon | It is AGPL-licensed. Recon only talks to it over the network if you run it, so its licence never touches Recon's code. Recon also has its own simpler mailbox check. |
 | Hunter only as a plug-in, off by default | It costs money beyond a small free allowance. It only runs with `--hunter` and a key Edem supplies, and only for businesses whose own website gave nothing to go on. |
+| Use the emails Overture lists, but only for businesses we may email (decided 13 October 2026) | Overture's 2026-09-23.1 release added `emails` and `socials`. In a Bath test, 114 of 216 places listed an email. They score 75, the same as OpenStreetMap; an address also found on the business's own site is upgraded to 90. Listed emails on `post only` rows are dropped at the emails step unless `--all-emails` is used. |
+| Overture's category column changed in 2026-09-23.1 | `categories.primary/alternate` became `taxonomy.primary/alternates`. Recon checks which columns a release has, so older and newer releases both work. Permanently closed places are left out. |
 | Mailbox checks are a separate step that can run elsewhere | They need port 25, which this cloud workspace and most home connections block. `recon verify --smtp-from` can run later on a small rented server. |
 | Be polite when crawling: robots.txt, a few pages per site, one page a second per site, an honest user agent | We are guests on small businesses' websites. |
 | Standard library only, apart from DuckDB for Overture | Easy to run anywhere, nothing to break. |
@@ -34,7 +36,7 @@ Edem then asked for it to live in its own repository and to serve **all** his pr
 
 ## How each step works, briefly
 
-- **Places.** Overture is queried with DuckDB straight from its public S3 bucket, filtered by country box, country code, category and a confidence of at least 0.5. OpenStreetMap is queried through Overpass, one tag at a time to keep the shared server happy. Duplicates are joined on a loose name plus postcode, or name plus position within about 100 metres; Overture's record wins and OSM fills gaps.
+- **Places.** Overture is queried with DuckDB straight from its public S3 bucket (anonymously, so stray AWS keys on a computer don't get it refused), filtered by country box, country code, category and a confidence of at least 0.5. OpenStreetMap is queried through Overpass, one tag at a time to keep the shared server happy. Duplicates are joined on a loose name plus postcode, or name plus position within about 100 metres; Overture's record wins and OSM fills gaps.
 - **Companies.** The Companies House file is filtered to active companies with the target's trade (SIC) codes, then matched by loose name. A match needs the same postcode district or town, or a unique name of at least two words, because a company's registered office is often its accountant's.
 - **Rules.** See RULES.md.
 - **People.** For companies we may email that have their own website, the Companies House API (free, needs a key) gives the active directors. One goes on the row.

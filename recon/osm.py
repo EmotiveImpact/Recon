@@ -57,6 +57,8 @@ def to_place(target, element):
         phone=tags.get("phone") or tags.get("contact:phone") or "",
         source="osm", source_id=f"{element['type']}/{element['id']}",
         email=email, email_found_on="openstreetmap" if email else "",
+        socials=" ".join(tags[k] for k in ("contact:instagram", "contact:facebook", "contact:tiktok")
+                         if tags.get(k)),
     )
 
 

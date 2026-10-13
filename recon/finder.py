@@ -22,6 +22,7 @@ from .emails import best_email
 
 CAN_EMAIL = "can email"
 READY = 70  # A score at or above this counts as ready to use.
+LISTINGS = ("openstreetmap", "overture")  # Map data that lists a business's email.
 
 # Where an address came from: (starting score, reason).
 BASIS = {
@@ -29,6 +30,7 @@ BASIS = {
     "published-other": (75, "Published on the business's own website, though not at its own "
                             "domain."),
     "openstreetmap": (75, "Listed for this business on OpenStreetMap."),
+    "overture": (75, "Listed for this business in Overture Maps."),
     "hunter": (65, "Found by Hunter, not on the business's own website."),
     "pattern-matched": (70, "Made from {name}'s name using the pattern ({pattern}) that the "
                             "business's own published addresses follow."),
@@ -80,12 +82,17 @@ def rescore(place):
         place["contact_name"], place["email_pattern"])
 
 
+def _own(address, site):
+    host = address.partition("@")[2]
+    return bool(site) and (host == site or host.endswith("." + site))
+
+
 def _basis(place, site):
     """Where the row's main address came from, judged from email_found_on."""
     found_on = place["email_found_on"]
     host = place["email"].partition("@")[2]
-    if found_on == "openstreetmap":
-        return "openstreetmap"
+    if found_on in ("openstreetmap", "overture"):
+        return found_on
     if found_on == "hunter.io":
         return "hunter"
     if found_on.startswith("http"):
@@ -181,15 +188,22 @@ def fill(places, found, people=None, hunter=None, everyone=False):
         may_email = place["contact_rule"] == CAN_EMAIL
         if not may_email:
             _clear_contact(place)
+            if not everyone and place["email_found_on"] in LISTINGS:
+                # Map data lists some emails; we keep none we may not use.
+                place["email"] = place["email_found_on"] = place["email_check"] = ""
         if not text.own_website(place["website"]) or not (may_email or everyone):
             place["email_basis"] = _basis(place, site) if place["email"] else ""
             rescore(place)
             continue
         candidates = found.get(site, {})
-        if not place["email"] and candidates:
-            email = best_email(list(candidates), site)
-            _set(place, "email", email)
-            place["email_found_on"] = candidates[email]
+        if candidates:
+            on_site = best_email(list(candidates), site)
+            listed = place["email"] if place["email_found_on"] in LISTINGS else ""
+            if listed in candidates:
+                place["email_found_on"] = candidates[listed]  # Also on its own site.
+            elif not place["email"] or (listed and not _own(listed, site) and _own(on_site, site)):
+                _set(place, "email", on_site)
+                place["email_found_on"] = candidates[on_site]
         own = own_addresses(site)
         pattern, how = patterns.learn(own, names(place))
         hunted = None
