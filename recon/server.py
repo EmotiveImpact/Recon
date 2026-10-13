@@ -293,9 +293,9 @@ def filter_rows(rows, query):
         if "company" in has and not row["company_number"]:
             continue
         if words:
-            haystack = " ".join(row[f] for f in ("name", "town", "postcode", "address", "email",
-                                                 "all_emails", "website", "company_name",
-                                                 "contact_name", "category")).lower()
+            haystack = " ".join(row.get(f) or "" for f in (
+                "name", "town", "postcode", "address", "email", "all_emails", "website",
+                "company_name", "legal_name", "contact_name", "category")).lower()
             if not all(w in haystack for w in words):
                 continue
         chosen.append(row)

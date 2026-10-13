@@ -153,6 +153,7 @@ function Details({ row, onClose }: { row: Row; onClose: () => void }) {
             <dt>Address</dt>
             <dd>{[row.address, row.town, row.postcode].filter(Boolean).join(", ") || "Not known"}</dd>
             {row.website && (<><dt>Website</dt><dd><a href={row.website} target="_blank" rel="noreferrer" style={{ color: "var(--accent-2)" }}>{row.website}</a></dd></>)}
+            {row.legal_name && row.legal_name !== row.company_name && (<><dt>Legal name</dt><dd>{row.legal_name}</dd></>)}
             <dt>Company</dt>
             <dd>{row.company_number ? `${row.company_name} (${row.company_number}), ${row.company_type}` : "Not matched to Companies House"}</dd>
             {row.company_match && (<><dt>How matched</dt><dd>{row.company_match}</dd></>)}
