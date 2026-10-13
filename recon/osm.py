@@ -9,7 +9,7 @@ import time
 import urllib.parse
 import urllib.request
 
-from . import places, text
+from . import contacts, places, text
 
 OVERPASS = "https://overpass-api.de/api/interpreter"
 USER_AGENT = "recon/0.1 (in-house research)"
@@ -47,17 +47,38 @@ def to_place(target, element):
     street = " ".join(filter(None, [tags.get("addr:housenumber"), tags.get("addr:street")]))
     website = tags.get("website") or tags.get("contact:website") or ""
     category = next((f"{k}={v}" for k, v in target.osm_tags() if tags.get(k) == v), "")
-    email = (tags.get("email") or tags.get("contact:email") or "").split(";")[0].strip()
-    return places.blank(
+    listed = [e.strip().lower() for key in ("email", "contact:email")
+              for e in tags.get(key, "").split(";") if "@" in e]
+    email = listed[0] if listed else ""
+    place = places.blank(
         name=name, sector=sector, category=category, address=street,
         town=tags.get("addr:city") or tags.get("addr:town") or "",
         postcode=text.postcode(tags.get("addr:postcode", ""), target.country),
         lat=round(lat, 6) if lat else "", lon=round(lon, 6) if lon else "",
         website=website if text.own_website(website) else "",
-        phone=tags.get("phone") or tags.get("contact:phone") or "",
         source="osm", source_id=f"{element['type']}/{element['id']}",
         email=email, email_found_on="openstreetmap" if email else "",
     )
+    contacts.add_emails(place, listed, text.domain(place["website"]))
+    contacts.add_phones(place, [n for key in ("phone", "contact:phone", "mobile", "contact:mobile")
+                                for n in tags.get(key, "").split(";")], target.country)
+    contacts.add_socials(place, [_social(k, v) for k, v in tags.items()] + [website])
+    return place
+
+
+_SOCIAL_BASES = {"instagram": "https://www.instagram.com/", "facebook": "https://www.facebook.com/",
+                 "tiktok": "https://www.tiktok.com/@", "twitter": "https://x.com/",
+                 "youtube": "https://www.youtube.com/@", "linkedin": "https://www.linkedin.com/company/"}
+
+
+def _social(key, value):
+    """A social tag as a link; OpenStreetMap often holds just the handle."""
+    kind = key.replace("contact:", "")
+    if kind not in _SOCIAL_BASES or not value:
+        return ""
+    if "/" in value or "." in value:
+        return value
+    return _SOCIAL_BASES[kind] + value.lstrip("@")
 
 
 def fetch(target, pause=10):

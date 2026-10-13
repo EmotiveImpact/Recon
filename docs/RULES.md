@@ -15,9 +15,17 @@ Two sets of rules apply: PECR (the Privacy and Electronic Communications Regulat
 Business-to-business letters are allowed without consent, as long as we honour requests to stop. Postcards suit the sole traders.
 
 **Phone**
-Calls are allowed unless the number is on the Corporate Telephone Preference Service (CTPS) or the TPS for sole traders. Screen before any calling campaign. Recon does not do this yet.
+Calls are allowed unless the number is on the Corporate Telephone Preference Service (CTPS) or the TPS for sole traders. Screen before any calling campaign. Recon does not do this yet. Recon tells mobiles from landlines; texting a mobile counts as electronic marketing under PECR, so a sole trader's mobile needs their consent before any text.
+
+**Seeing is not permission.** Since 13 October 2026 Recon shows every email, phone number and social link it finds, for every business, so Edem can see the full picture. A personal address (Gmail, Hotmail and so on) or a sole trader's mobile on a `post only` row is there to inform decisions, never to be emailed, texted or called without consent. `contact_rule` still decides who may be emailed.
 
 How Recon applies it: a business matched to Companies House as a company or LLP gets `can email`. Everything else, including any business we could not match, gets `post only`.
+
+**Named people.** Recon may put one person's name and address on a `can email` row, so an email can go to the owner rather than a shared inbox. To keep this fair under UK GDPR:
+- Only for companies and LLPs we may email. Never for `post only` rows, so a sole trader's personal address is never worked out.
+- The name is an active director (or LLP member) from Companies House, which is public by law. Secretaries, former directors and companies acting as directors are left out.
+- One person per business, nothing more about them than name, role and address.
+- A worked-out address is marked as such, with its confidence and the reason, and is never presented as published. Our first email must say where we got their details and how to opt out, and an opt-out goes on the suppression list.
 
 ## United States
 
