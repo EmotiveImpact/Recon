@@ -6,6 +6,7 @@ decides who may be emailed, and phone numbers must be screened against the
 TPS and CTPS before anyone rings them (docs/RULES.md).
 """
 
+import os
 import re
 
 from . import patterns, text
@@ -32,6 +33,57 @@ SOCIAL_SITES = ("instagram.com", "facebook.com", "fb.com", "tiktok.com", "x.com"
 _NOT_A_PROFILE = re.compile(r"/(sharer|share|intent|plugins|dialog|tr)\b|[?&]u=", re.I)
 
 
+# Stricter checks that an address could be real, after the ideas in
+# email-validator (Unlicense); written fresh.
+_LOCAL = re.compile(r"^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+$")
+_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+PLACEHOLDERS = {"name", "your", "yourname", "you", "email", "user", "username", "example",
+                "firstname", "firstlast", "first.last", "firstname.lastname", "someone",
+                "johndoe", "john.doe", "jane.doe", "test"}
+# Throwaway mailboxes, which nobody reads for long. A short list of the most
+# common; put the full public list (the CC0 "disposable-email-domains"
+# project) in data/disposable_domains.txt to use all of it.
+THROWAWAY = {"mailinator.com", "guerrillamail.com", "10minutemail.com", "tempmail.com",
+             "temp-mail.org", "yopmail.com", "trashmail.com", "sharklasers.com",
+             "getnada.com", "dispostable.com", "maildrop.cc", "throwawaymail.com",
+             "fakeinbox.com", "mintemail.com", "mailnesia.com", "tempr.email"}
+_THROWAWAY_FILE = os.path.join("data", "disposable_domains.txt")
+
+
+def _throwaway():
+    if not hasattr(_throwaway, "domains"):
+        domains = set(THROWAWAY)
+        try:
+            with open(_THROWAWAY_FILE, encoding="utf-8") as handle:
+                domains |= {line.strip().lower() for line in handle
+                            if line.strip() and not line.startswith("#")}
+        except OSError:
+            pass
+        _throwaway.domains = domains
+    return _throwaway.domains
+
+
+def valid_email(address):
+    """True when an address could really exist and be read."""
+    address = (address or "").strip().lower()
+    if address.count("@") != 1 or len(address) > 254:
+        return False
+    local, host = address.split("@")
+    if not 0 < len(local) <= 64 or not _LOCAL.match(local):
+        return False
+    if local.startswith(".") or local.endswith(".") or ".." in local:
+        return False
+    if local in PLACEHOLDERS:
+        return False
+    labels = host.split(".")
+    if len(labels) < 2 or not all(_LABEL.match(label) for label in labels):
+        return False
+    tld = labels[-1]
+    if not (tld.isalpha() and 2 <= len(tld) <= 24) and not tld.startswith("xn--"):
+        return False
+    return host not in _throwaway()
+
+
 def email_label(address, site=""):
     local, _, host = address.lower().partition("@")
     if host in FREE_MAIL:
@@ -53,7 +105,7 @@ def add_emails(place, addresses, site=""):
     known = split(place["all_emails"])
     for address in addresses:
         address = address.strip().lower()
-        if address and "@" in address and address not in known:
+        if valid_email(address) and address not in known:
             known.append(address)
     place["all_emails"] = "; ".join(f"{a} ({email_label(a, site)})" for a in known)
 

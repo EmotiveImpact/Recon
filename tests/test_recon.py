@@ -568,6 +568,89 @@ class ContactTests(unittest.TestCase):
         self.assertIn("jo@gmail.com (personal)", joined["all_emails"])
 
 
+class NearMatchTests(unittest.TestCase):
+    INDEX = {
+        "glow room beauty": [{"number": "1", "name": "GLOW ROOM BEAUTY LTD", "postcode": "BA1 1AA",
+                              "category": "Private Limited Company", "town": "bath",
+                              "street": "1 high street", "sector": "x"}],
+        "studio 8": [{"number": "2", "name": "STUDIO 8 LTD", "postcode": "BA1 2BB",
+                      "category": "Private Limited Company", "town": "bath",
+                      "street": "", "sector": "x"}],
+    }
+
+    def test_shorter_name_in_the_same_district_matches(self):
+        place = places.blank(name="The Glow Room", postcode="BA1 5ZZ")
+        self.assertEqual(companies_house.mark([place], self.INDEX), 1)
+        self.assertEqual(place["company_number"], "1")
+        self.assertIn("close name", place["company_match"])
+
+    def test_different_numbers_never_match(self):
+        place = places.blank(name="Studio 7", postcode="BA1 2BB")
+        self.assertEqual(companies_house.mark([place], self.INDEX), 0)
+
+    def test_two_equally_likely_companies_mean_no_match(self):
+        index = dict(self.INDEX)
+        index["glow room aesthetics"] = [dict(self.INDEX["glow room beauty"][0], number="3",
+                                              name="GLOW ROOM AESTHETICS LTD")]
+        place = places.blank(name="Glow Room", postcode="BA1 5ZZ")
+        self.assertEqual(companies_house.mark([place], index), 0)
+
+    def test_exact_matches_say_so(self):
+        place = places.blank(name="Glow Room Beauty", postcode="BA1 1AA")
+        companies_house.mark([place], self.INDEX)
+        self.assertEqual(place["company_match"], "same name")
+
+
+class StructuredDataTests(unittest.TestCase):
+    PAGE = ('<script type="application/ld+json">{"@type": "BeautySalon", '
+            '"telephone": "+44 1225 123456", "email": "mailto:hello@glowroom.co.uk", '
+            '"sameAs": ["https://www.instagram.com/glowroom", "https://glowroom.co.uk"]}'
+            '</script><span itemprop="telephone">07700 900123</span>'
+            '<script type="application/ld+json">{broken</script>')
+
+    def test_json_ld_and_microdata(self):
+        found, phones, _ = emails.structured(self.PAGE)
+        self.assertEqual(found, ["hello@glowroom.co.uk"])
+        self.assertEqual(phones, ["+44 1225 123456", "07700 900123"])
+        self.assertEqual(emails.phones_and_socials(self.PAGE)[1],
+                         ["https://www.instagram.com/glowroom"])
+
+    def test_site_map_finds_unlinked_contact_pages(self):
+        class Robots:
+            def site_maps(self):
+                return ["https://glowroom.co.uk/sitemap.xml"]
+
+            def can_fetch(self, agent, url):
+                return True
+
+        listing = ("<urlset><url><loc>https://glowroom.co.uk/prices</loc></url>"
+                   "<url><loc>https://glowroom.co.uk/about-us</loc></url>"
+                   "<url><loc>https://glowroom.co.uk/contact</loc></url>"
+                   "<url><loc>https://other.co.uk/contact</loc></url></urlset>")
+        original, sleep = emails._fetch, emails.time.sleep
+        emails._fetch = lambda url, kind="html": (listing, url)
+        emails.time.sleep = lambda seconds: None
+        try:
+            found = emails.sitemap_links(Robots(), "https://glowroom.co.uk/")
+        finally:
+            emails._fetch, emails.time.sleep = original, sleep
+        self.assertEqual(found, ["https://glowroom.co.uk/contact",
+                                 "https://glowroom.co.uk/about-us"])
+
+
+class ValidEmailTests(unittest.TestCase):
+    def test_real_looking_addresses_pass(self):
+        for address in ("info@glowroom.co.uk", "sarah.o'brien@glowroom.co.uk",
+                        "jo+bookings@gmail.com"):
+            self.assertTrue(contacts.valid_email(address), address)
+
+    def test_broken_placeholder_and_throwaway_addresses_fail(self):
+        for address in ("a..b@glowroom.co.uk", ".a@glowroom.co.uk", "name@glowroom.co.uk",
+                        "jo@mailinator.com", "jo@-glowroom.co.uk", "jo@glowroom.c",
+                        "jo@@glowroom.co.uk"):
+            self.assertFalse(contacts.valid_email(address), address)
+
+
 class VerifyTests(unittest.TestCase):
     def test_a_confirmed_other_pattern_replaces_a_guess(self):
         place = _company(contact_name="Amy Wu", contact_email="amy@glowroom.co.uk",

@@ -25,6 +25,12 @@ MAX_EXTRA_PAGES = 3
 TIMEOUT = 12
 
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}")
+_JSON_LD = re.compile(r"""<script[^>]+type\s*=\s*["']application/ld\+json["'][^>]*>(.*?)</script>""",
+                      re.I | re.S)
+_MICRODATA = re.compile(
+    r"""itemprop\s*=\s*["'](email|telephone)["'][^>]*?(?:content\s*=\s*["']([^"']+)["'][^>]*>|>([^<]+)<)""",
+    re.I)
+_LOC = re.compile(r"<loc>\s*([^<\s]+)\s*</loc>", re.I)
 _HREF = re.compile(r"""href\s*=\s*["']([^"']+)["']""", re.I)
 _LINK = re.compile(r"""<a\b[^>]*href\s*=\s*["']([^"'#]+)["'][^>]*>(.*?)</a>""", re.I | re.S)
 _CONTACTISH = re.compile(r"contact|about|get-in-touch|find-us|visit|book|enquir|team|meet|staff",
@@ -47,10 +53,10 @@ _PREFERRED = ("info", "hello", "contact", "bookings", "booking", "enquiries", "e
               "reception", "salon", "studio", "admin", "office")
 
 
-def _fetch(url):
+def _fetch(url, kind="html"):
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-        if "html" not in (response.headers.get("Content-Type") or "html"):
+        if kind not in (response.headers.get("Content-Type") or kind):
             return "", response.geturl()
         body = response.read(MAX_BYTES)
         charset = response.headers.get_content_charset() or "utf-8"
@@ -97,6 +103,8 @@ def clean_candidates(page):
             continue
         if any(junk in email.split("@")[1] for junk in _JUNK_DOMAINS):
             continue
+        if not contacts.valid_email(email):
+            continue
         if email not in found:
             found.append(email)
     return found
@@ -134,23 +142,89 @@ def contact_links(page, base):
     return links[:MAX_EXTRA_PAGES]
 
 
+def structured(page):
+    """Business details a page states for search engines, as (emails, phones,
+    social links): schema.org JSON-LD and microdata. After the ideas in
+    extruct (BSD); written fresh, no code copied."""
+    emails, phones, socials = [], [], []
+
+    def walk(item):
+        if isinstance(item, list):
+            for value in item:
+                walk(value)
+        elif isinstance(item, dict):
+            for key, value in item.items():
+                if key == "email" and isinstance(value, str):
+                    emails.append(value.replace("mailto:", "").strip())
+                elif key == "telephone" and isinstance(value, str):
+                    phones.append(value)
+                elif key == "sameAs":
+                    socials.extend(v for v in ([value] if isinstance(value, str) else value)
+                                   if isinstance(v, str))
+                else:
+                    walk(value)
+
+    for block in _JSON_LD.findall(page):
+        try:
+            walk(json.loads(html.unescape(block).strip()))
+        except (json.JSONDecodeError, RecursionError):
+            continue  # Broken markup is common; skip it.
+    for prop, content, inner in _MICRODATA.findall(page):
+        value = html.unescape(content or inner).strip()
+        (emails if prop.lower() == "email" else phones).append(value.replace("mailto:", ""))
+    return emails, phones, socials
+
+
 def phones_and_socials(page):
-    """Phone numbers from tel: links, and links to social profiles."""
-    phones, socials = [], []
+    """Phone numbers from tel: links and structured data, and links to social profiles."""
+    _, phones, socials = structured(page)
     for href in _HREF.findall(page):
         href = html.unescape(href).strip()
         if href.lower().startswith("tel:"):
             phones.append(urllib.parse.unquote(href[4:]))
         elif contacts.social_link(href):
             socials.append(href)
-    return phones, socials
+    socials = [s for s in socials if contacts.social_link(s)]
+    return list(dict.fromkeys(p.strip() for p in phones if p.strip())), list(dict.fromkeys(socials))
+
+
+def sitemap_links(robots, base):
+    """Contact-looking pages listed in the site map, for sites whose pages
+    don't link to them (common with menus drawn by JavaScript). After the
+    ideas in trafilatura and courlan (Apache 2.0); written fresh."""
+    maps = list(getattr(robots, "site_maps", lambda: None)() or [])[:1] or [
+        urllib.parse.urljoin(base, "/sitemap.xml")]
+    host = text.domain(base)
+    if not robots.can_fetch(USER_AGENT, maps[0]):
+        return []
+    time.sleep(1)  # One page a second per site.
+    try:
+        listing, _ = _fetch(maps[0], kind="xml")
+    except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError):
+        return []
+    urls = [html.unescape(u).strip() for u in _LOC.findall(listing)]
+    if "<sitemapindex" in listing:  # A list of site maps: open the one for pages.
+        pages = [u for u in urls if re.search(r"page", u, re.I)] or urls[:1]
+        if not pages or not robots.can_fetch(USER_AGENT, pages[0]):
+            return []
+        time.sleep(1)
+        try:
+            listing, _ = _fetch(pages[0], kind="xml")
+        except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError):
+            return []
+        urls = [html.unescape(u).strip() for u in _LOC.findall(listing)]
+    found = [u for u in urls if text.domain(u) == host
+             and _CONTACTISH.search(urllib.parse.urlparse(u).path)]
+    found.sort(key=lambda url: 0 if _CONTACT_FIRST.search(url) else 1)
+    return found[:MAX_EXTRA_PAGES]
 
 
 def crawl(website, extras=None):
     """Every address on a business's own site: ({email: page it was on}, note).
 
     Reads the homepage, then up to three same-site pages that look like
-    contact, about or team pages (or /contact when none is linked). Phone
+    contact, about or team pages: linked from the homepage, or else listed in
+    the site map, or else /contact. Phone
     numbers and social links found on the way go into extras, if given.
     """
     extras = {} if extras is None else extras
@@ -158,7 +232,8 @@ def crawl(website, extras=None):
     extras.setdefault("socials", [])
 
     def read(page, url):
-        for email in clean_candidates(page):
+        listed, _, _ = structured(page)
+        for email in clean_candidates(page + " " + " ".join(listed)):
             found_on.setdefault(email, url)
         phones, socials = phones_and_socials(page)
         extras["phones"] += [p for p in phones if p not in extras["phones"]]
@@ -174,7 +249,7 @@ def crawl(website, extras=None):
             return {}, "site asks robots not to visit"
         page, final_url = _fetch(start)
         read(page, final_url)
-        links = contact_links(page, final_url) or [
+        links = contact_links(page, final_url) or sitemap_links(robots, final_url) or [
             urllib.parse.urljoin(final_url, path) for path in _FALLBACK_PAGES]
         for link in links[:MAX_EXTRA_PAGES]:
             if not robots.can_fetch(USER_AGENT, link):

@@ -20,17 +20,16 @@ import re
 import urllib.error
 import urllib.request
 
-from . import dns, finder, text
+from . import contacts, dns, finder, text
 from .mailbox import Checker
 
 REACHER = os.environ.get("RECON_REACHER_URL", "http://localhost:8080")
-_SHAPE = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,24}$", re.I)
 GUESSES_TO_TRY = 3  # Other patterns tried for a named person, when a check can answer.
 
 
 def check(email):
     """Ask Reacher: 'safe', 'risky', 'invalid' or 'unknown'."""
-    if not _SHAPE.match(email):
+    if not contacts.valid_email(email):
         return "invalid"
     request = urllib.request.Request(
         f"{REACHER}/v0/check_email", data=json.dumps({"to_email": email}).encode(),
@@ -63,7 +62,7 @@ def _ask(ask, mx, address, extra=()):
     status, hosts = mx(domain)
     if status == dns.NO:
         return {a: "no mail server" for a in (address, *extra)}
-    if not _SHAPE.match(address):
+    if not contacts.valid_email(address):
         return {address: "invalid"}
     if not ask:
         return {a: "looks right" for a in (address, *extra)}

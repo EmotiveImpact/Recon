@@ -69,7 +69,7 @@ Copy `targets/saleane-uk.json`, give it the project name and country, and list t
 | `website` | From the map data; booking-platform and social links are left out |
 | `phone`, `phone_type`, `mobile`, `landline`, `all_phones`, `mobile_only` | Every number from the map data and the website (tel: links), each labelled mobile, landline or non-geographic. `mobile_only` is "yes" when the only numbers are mobiles, often a sign of a sole trader. Screen against the TPS and CTPS before calling |
 | `socials` | Every social link (Instagram, Facebook, TikTok and so on) from the map data and the website |
-| `company_number`, `company_name`, `company_type` | Its Companies House record, when matched |
+| `company_number`, `company_name`, `company_type`, `company_match` | Its Companies House record, when matched, and how the match was made |
 | `contact_rule` | `can email`, `post only` or `check local rules` |
 | `email`, `email_type`, `email_found_on`, `email_check` | The business's main email, its kind (shared inbox, named person, personal, other business domain), the page it was on, and the check result |
 | `all_emails` | Every address found anywhere, each labelled the same way. Seeing an address is not permission to email it: `contact_rule` decides |

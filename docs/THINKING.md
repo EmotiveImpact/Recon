@@ -26,6 +26,10 @@ Edem then asked for it to live in its own repository and to serve **all** his pr
 | Reacher stays optional and outside Recon | It is AGPL-licensed. Recon only talks to it over the network if you run it, so its licence never touches Recon's code. Recon also has its own simpler mailbox check. |
 | Hunter only as a plug-in, off by default | It costs money beyond a small free allowance. It only runs with `--hunter` and a key Edem supplies, and only for businesses whose own website gave nothing to go on. |
 | Use the emails, phones and social links Overture lists (decided 13 October 2026) | Overture's 2026-09-23.1 release added `emails` and `socials`. In a Bath test of 216 places: 114 listed an email (58 of them personal ones), 210 a phone (55 mobile only) and 186 a social link. Listed emails score 75, the same as OpenStreetMap; an address also found on the business's own site is upgraded to 90. |
+| Near-match businesses to Companies House (13 October 2026) | Many studios trade under a shorter or slightly different name ("The Glow Room" for GLOW ROOM BEAUTY LTD). Within the same postcode district, names are compared ignoring word order and company words; a match needs a name likeness of 0.92, or 0.85 with the same postcode or street, and must clearly beat the next candidate. Different numbers ("Studio 7", "Studio 8") never match. When unsure there is no match, so the row stays `post only`. `company_match` says how each match was made. |
+| Read the business details websites state for search engines | Many salon sites carry schema.org JSON-LD or microdata with their email, phone and social links, even when the page text doesn't. |
+| Use the site map when a homepage links to no contact page | Menus drawn by JavaScript hide links from a simple reader; the site map still lists the pages. It costs one extra request. |
+| Stricter address checks | Addresses with broken shapes, placeholders (name@, your@) or throwaway domains are dropped. The full public throwaway list can be added as `data/disposable_domains.txt`. |
 | A mobile-only business is flagged (`mobile_only`) | A studio reached only on a mobile is often one person working alone, a hint it may be a sole trader even when it looks like a company. |
 | Overture's category column changed in 2026-09-23.1 | `categories.primary/alternate` became `taxonomy.primary/alternates`. Recon checks which columns a release has, so older and newer releases both work. Permanently closed places are left out. |
 | Mailbox checks are a separate step that can run elsewhere | They need port 25, which this cloud workspace and most home connections block. `recon verify --smtp-from` can run later on a small rented server. |
@@ -35,10 +39,19 @@ Edem then asked for it to live in its own repository and to serve **all** his pr
 | Recon finds people; it does not send | Sending needs a separate domain, a suppression list and an unsubscribe flow. That is a deliberate next stage, see NEXT.md. |
 | The repository is public, the data never is | `.gitignore` blocks `data/`, `out/` and every CSV, zip and parquet file. |
 
+## Open-source projects we learn from
+
+Recon stays standard library only, so it takes ideas, not code. Where an idea came from a project with a permissive licence, a comment at that spot names it.
+
+- Ideas used (permissive licences): Splink and uk_address_matcher (MIT) for near-match linking; extruct (BSD) for structured data; trafilatura and courlan (Apache 2.0) for finding pages through site maps; phonenumbers (Apache 2.0) for UK number rules; email-validator (Unlicense) for address checks; MailScout and ColdReach (MIT) for patterns and catch-all checks; disposable-email-domains (CC0) for throwaway domains.
+- Read for ideas only, never copy from: Reacher (AGPL), theHarvester (GPL), EmailFinder (GPL), fuzzywuzzy (GPL) and nameparser (LGPL). Copying their code would put Recon under their licence terms.
+- Not to be used at all: openleads (forbids commercial use) and local-business-lead-finder (custom licence).
+- For sending later, listmonk (AGPL) is fine to run as a separate program, never merged into Recon.
+
 ## How each step works, briefly
 
 - **Places.** Overture is queried with DuckDB straight from its public S3 bucket (anonymously, so stray AWS keys on a computer don't get it refused), filtered by country box, country code, category and a confidence of at least 0.5. OpenStreetMap is queried through Overpass, one tag at a time to keep the shared server happy. Duplicates are joined on a loose name plus postcode, or name plus position within about 100 metres; Overture's record wins and OSM fills gaps.
-- **Companies.** The Companies House file is filtered to active companies with the target's trade (SIC) codes, then matched by loose name. A match needs the same postcode district or town, or a unique name of at least two words, because a company's registered office is often its accountant's.
+- **Companies.** The Companies House file is filtered to active companies with the target's trade (SIC) codes, then matched by loose name. A match needs the same postcode district or town, or a unique name of at least two words, because a company's registered office is often its accountant's. Failing that, a near match within the postcode district (see the decisions above).
 - **Rules.** See RULES.md.
 - **People.** For companies we may email that have their own website, the Companies House API (free, needs a key) gives the active directors. One goes on the row.
 - **Emails.** The homepage, then up to three same-site pages (contact pages first, then about and team pages; `/contact` if none is linked). Every address is kept in the cache, including ones hidden from robots by Cloudflare or written as "name [at] domain [dot] com". The best address for the row is one on the business's own domain, then a shared inbox name such as info@ or bookings@.
