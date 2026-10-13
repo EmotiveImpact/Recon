@@ -76,18 +76,9 @@ def _wa_rule(*names):
     return rule("US", is_corp, WA_CORP if is_corp else WA_PERSON), is_corp
 
 
-PROFESSIONAL = "professional licence register: waiting on Edem's decision"
-
-# Licence registers of tradespeople, held until Edem decides whether they
-# count as the professional registers Recon's rules exclude.
-_PENDING = {"nyc-dob-licences", "delaware-septic-licensees", "delaware-well-contractors"}
-
-
 def _source(name, title, url, licence, updated, fields):
     source = {"name": name, "title": title, "country": "US", "url": url,
               "licence": licence, "updated": updated, "fields": fields}
-    if name in _PENDING:
-        source["pending"] = PROFESSIONAL
     return source
 
 

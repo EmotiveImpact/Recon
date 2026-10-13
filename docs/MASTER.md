@@ -20,6 +20,12 @@ Every row is one entry from one register, in the same columns whatever the sourc
 
 `organisations.parquet` has one row per organisation, with the contacts from every register merged. `sources.csv` lists every register with its link, licence and counts.
 
+The organisations are also split by country, so each can be opened on its own:
+- `uk/england.parquet`, `uk/scotland.parquet`, `uk/wales.parquet`, `uk/northern-ireland.parquet` (by postcode area; the few areas that straddle the Welsh border count as England), and `uk/unknown.parquet` for rows without a postcode.
+- `us/<state>.parquet`, such as `us/ct.parquet`, from the state in the address.
+- `other/<country>.parquet` for the few registered abroad.
+Each folder has a `counts.csv` with the numbers per nation or state.
+
 ## Who may be emailed
 
 The rules in RULES.md, applied per register and per legal form:
@@ -40,6 +46,6 @@ The ICO register of fee payers (its emails are named people, and its licence exc
     python -m recon.master export --out ... --where "kind = 'students'' union'" --to su.csv
     python -m recon.master summary --out ...
 
-Downloads are kept in the cache folder, so a rebuild only fetches what is new. Each register's loader lives in `recon/sources/`, one file per register (or a few small registers in one file); adding a register means adding a loader and naming it in `LOADERS`.
+`build` also joins and splits the results; `combine` and `segment` redo just those steps. Downloads are kept in the cache folder, so a rebuild only fetches what is new. Each register's loader lives in `recon/sources/`, one file per register (or a few small registers in one file); adding a register means adding a loader and naming it in `LOADERS`.
 
 The built database holds contact details, so it never goes in this repository. It lives in the project's private files (`/mnt/project-files/master-db/`).

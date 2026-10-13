@@ -11,9 +11,11 @@ Two sources:
 
 2. The Form 990-N (e-Postcard) file: small organisations (receipts normally
    under $50,000) that file the e-Postcard instead of a full return. Gives the
-   principal officer's name and address, and a website for some. The file
-   holds one row per filing year, so only each organisation's latest filing is
-   kept, and terminated organisations are dropped.
+   principal officer's name and address, and a website (or now and then an
+   email) for some. The file holds one row per filing year, so only each
+   organisation's latest filing is kept; terminated organisations and those
+   that have not filed for over three years are dropped. The kind is guessed
+   from the name, as this file has no activity code.
 
 The full Form 990 e-file XML (which has phone and website for larger
 organisations) is not loaded: it comes as many gigabytes of zipped XML and
@@ -24,7 +26,9 @@ files share the EIN, written "EIN 12-3456789", so rows can be matched.
 """
 
 import os
+import re
 import zipfile
+from datetime import date
 from types import SimpleNamespace
 
 from . import download, joined, read_csv, record, rule
@@ -120,7 +124,12 @@ SUBSECTIONS = {
 }
 
 # Finer kinds for 501(c)(5) and (c)(6), from the CLASSIFICATION code.
-CLASS_05 = {"1": "labour union", "2": "agricultural organisation", "3": "horticultural organisation"}
+# The IRS code list says 1 agricultural, 2 horticultural, 3 labour, but many
+# unions sit under 1, so a union-like name or NTEE J40 also counts as a union.
+CLASS_05 = {"1": "agricultural organisation", "2": "horticultural organisation", "3": "labour union"}
+UNION_WORDS = re.compile(r"\b(UNION|WORKERS|EMPLOYEES|LOCAL|BROTHERHOOD|TEAMSTERS|AFL[- ]?CIO|"
+                         r"FEDERATION|GUILD|FRATERNAL ORDER OF POLICE|"
+                         r"TEACHERS|NURSES|FIREFIGHTERS|DEPUTIES|OFFICERS)\b")
 CLASS_06 = {"1": "trade association", "2": "chamber of commerce", "3": "real estate board",
             "4": "board of trade", "5": "sports league"}
 
@@ -170,6 +179,8 @@ def kind(name, subsection, ntee, classification="", foundation=""):
     if ntee.startswith("O"):
         return "youth organisation"
     if subsection == "05":
+        if ntee.startswith("J40") or UNION_WORDS.search(name.upper()):
+            return "labour union"
         return CLASS_05.get((classification or "")[:1], "labour union")
     if subsection == "06":
         return CLASS_06.get((classification or "")[:1], "trade association")
@@ -182,6 +193,12 @@ def kind(name, subsection, ntee, classification="", foundation=""):
     if subsection in ("03", "04") and ntee.startswith("W30"):
         return "veterans' organisation"
     return SUBSECTIONS.get(subsection, ("non-profit", ""))[0]
+
+
+def _sort_name(value):
+    """The IRS "sort name" is sometimes a second name, sometimes only a lodge or
+    chapter number; keep it only when it has words in it."""
+    return value if re.search(r"[A-Za-z]{3}", value or "") else ""
 
 
 def _bmf_rows(cache):
@@ -197,7 +214,7 @@ def _bmf_rows(cache):
             label = SUBSECTIONS.get(sub, ("", f"subsection {sub}"))[1]
             can, why = rule(country, None, CAN_SPAM)
             yield record(
-                BMF.SOURCE, row["EIN"], row["NAME"], other_name=row["SORT_NAME"],
+                BMF.SOURCE, row["EIN"], row["NAME"], other_name=_sort_name(row["SORT_NAME"]),
                 kind=kind(row["NAME"], sub, row["NTEE_CD"], row["CLASSIFICATION"],
                           row["FOUNDATION"].strip()),
                 category=joined(category(row["NTEE_CD"]), label, sep="; "),
@@ -208,35 +225,96 @@ def _bmf_rows(cache):
                 registration_number=f"EIN {ein(row['EIN'])}", can_email=can, rule_reason=why)
 
 
+_URL = re.compile(r"(https?://[^\s|()]+|(?:[\w-]+\.)+[a-z]{2,}(?:/[^\s|()]*)?)", re.I)
+
+
+_EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+
+# Email providers people type into the website box by mistake.
+WEBMAIL = {"gmail.com", "yahoo.com", "hotmail.com", "aol.com", "outlook.com", "live.com",
+           "msn.com", "icloud.com", "comcast.net", "att.net", "verizon.net", "sbcglobal.net",
+           "bellsouth.net", "charter.net", "cox.net", "earthlink.net", "me.com", "ymail.com",
+           "protonmail.com", "mail.com", "gmx.com", "frontier.com", "windstream.net"}
+
+
+def _website(value):
+    """The first web address in the e-Postcard website box, which sometimes
+    holds a firm's name, a sentence or an email address instead."""
+    value = _EMAIL.sub(" ", value or "")
+    match = _URL.search(value)
+    if not match:
+        return ""
+    host = match.group(1).lower().split("://")[-1].split("/")[0]
+    host = host[4:] if host.startswith("www.") else host
+    return "" if host in WEBMAIL else match.group(1)
+
+
+# Name words that show what a small organisation is, checked in this order.
+NAME_KINDS = [
+    (r"\b(PTA|PTO|PTSA|PARENT TEACHER|PARENTS? (AND|&) TEACHERS?)\b", "parent-teacher association"),
+    (r"\bBOOSTERS?\b", "booster club"),
+    (r"\b(SCOUTS?|SCOUTING|4-H|LITTLE LEAGUE|YOUTH|BOYS (AND|&) GIRLS CLUB)\b", "youth organisation"),
+    (r"\b(VFW|VETERANS|AMERICAN LEGION|AMVETS|DISABLED AMERICAN VETERANS)\b", "veterans' organisation"),
+    (r"\bCHAMBER OF COMMERCE\b", "chamber of commerce"),
+    (r"\b(LOCAL \d+|LABOR UNION|TRADES COUNCIL|BROTHERHOOD OF|TEAMSTERS|AFL[- ]?CIO)\b", "labour union"),
+    (r"\b(LODGE|GRANGE|MASONIC|ELKS|MOOSE|EAGLES|KNIGHTS OF|ODD FELLOWS|SHRINERS)\b", "fraternal society"),
+    (r"\b(CHURCH|MINISTRY|MINISTRIES|CHAPEL|PARISH|TEMPLE|MOSQUE|SYNAGOGUE)\b", "religious organisation"),
+    (r"\b(SOCCER|FOOTBALL|BASEBALL|SOFTBALL|BASKETBALL|HOCKEY|LACROSSE|VOLLEYBALL|SWIM|"
+     r"WRESTLING|RUGBY|TENNIS|GOLF|ATHLETIC|SPORTS?|ROD (AND|&) GUN|GUN CLUB|RIDING|SKI)\b",
+     "sports or recreation club"),
+    (r"\b(ASSOCIATION OF|SOCIETY OF|INSTITUTE OF)\b.*\b(PROFESSIONALS|ENGINEERS|ACCOUNTANTS|"
+     r"MANAGERS|NURSES|REALTORS|CONTRACTORS|PLANNERS|ARCHITECTS)\b", "professional association"),
+    (r"\bCLUB\b", "social or sports club"),
+]
+NAME_KINDS = [(re.compile(pattern), label) for pattern, label in NAME_KINDS]
+
+
+def kind_from_name(name):
+    """A best guess at what a small organisation is, from its name alone."""
+    found = kind(name, "", "")
+    if found != "non-profit":
+        return found
+    upper = (name or "").upper()
+    for pattern, label in NAME_KINDS:
+        if pattern.search(upper):
+            return label
+    return "non-profit"
+
+
 def _epostcard_rows(cache):
     path = download(EPOSTCARD_FILE, os.path.join(cache, "data-download-epostcard.zip"))
     latest = {}  # EIN -> (year, raw line): the raw line keeps memory low.
     with zipfile.ZipFile(path) as archive:
         with archive.open(archive.namelist()[0]) as handle:
             for raw in handle:
-                key, year = raw.split(b"|", 2)[:2]
+                parts = raw.split(b"|", 2)
+                if len(parts) < 3:
+                    continue
+                key, year = parts[0], parts[1]
                 if key not in latest or year >= latest[key][0]:
                     latest[key] = (year, raw)
+    oldest = date.today().year - 3
     for _year, raw in latest.values():
         parts = raw.decode("latin-1").rstrip("\r\n").split("|")
         if len(parts) < 26:
             continue
-        if len(parts) > 26:  # A stray pipe inside a name: keep the ends lined up.
-            parts = parts[:2] + ["|".join(parts[2:len(parts) - 23])] + parts[-23:]
-        (number, year, name, terminated, _small, _begin, _end, website, officer,
+        if len(parts) > 26:  # A stray pipe inside the website box: keep the ends lined up.
+            parts = parts[:7] + ["|".join(parts[7:len(parts) - 18])] + parts[-18:]
+        (number, year, name, _small, terminated, _begin, _end, website, officer,
          _o1, _o2, _ocity, _oprov, _ostate, _ozip, _ocountry,
          street1, street2, city, province, state, postcode, country,
          dba1, dba2, dba3) = parts
-        if terminated.strip().upper() == "T":
+        # Terminated, or silent for over three years (the IRS then revokes exemption).
+        if terminated.strip().upper() == "T" or not year.isdigit() or int(year) < oldest:
             continue
         country = "US" if country.strip() in ("", "US") else country.strip()
         can, why = rule(country, None, CAN_SPAM)
         yield record(
             EPOSTCARD.SOURCE, number, name, other_name=joined(dba1, dba2, dba3, sep="; "),
-            kind=kind(name, "", ""), category="small non-profit (990-N filer)",
+            kind=kind_from_name(name), category="small non-profit (990-N filer)",
             status=f"Filed 990-N for {year}", address=joined(street1, street2),
             town=city, region=state or province, postcode=postcode, country=country,
-            website=website if "." in website else "", people=officer.strip(),
+            website=_website(website), emails=_EMAIL.findall(website), people=officer.strip(),
             registration_number=f"EIN {ein(number)}", can_email=can, rule_reason=why)
 
 

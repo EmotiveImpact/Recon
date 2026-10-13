@@ -101,6 +101,12 @@ class GroupingTests(unittest.TestCase):
         self.assertEqual(groups["test-register:2"], groups["test-register:3"])
         self.assertNotEqual(groups["test-register:1"], groups["test-register:4"])
 
+    def test_company_number_joins(self):
+        rows = [row(1, "Glow Room CIC", country="GB", company_number="123456"),
+                row(2, "GLOW ROOM COMMUNITY INTEREST COMPANY", country="GB", company_number="00123456")]
+        groups = master.group(rows)
+        self.assertEqual(groups["test-register:1"], groups["test-register:2"])
+
     def test_malformed_website_is_ignored(self):
         rows = [row(1, "A", country="US", website="http://[None]"), row(2, "B", country="US")]
         self.assertEqual(len(set(master.group(rows).values())), 2)
@@ -151,6 +157,10 @@ class BuildTests(unittest.TestCase):
                 listed = {r["name"]: r for r in csv.DictReader(handle)}
             self.assertEqual(listed["register-b"]["licence"], "Public Domain")
             self.assertEqual(listed["register-a"]["records"], "2")
+            master.segment(out)
+            self.assertTrue(os.path.exists(os.path.join(out, "uk", "england.parquet")))
+            with open(os.path.join(out, "uk", "counts.csv")) as handle:
+                self.assertEqual(next(csv.DictReader(handle))["organisations"], "2")
             target = os.path.join(out, "glow.csv")
             self.assertEqual(master.export(out, "emails <> ''", target), 2)
 

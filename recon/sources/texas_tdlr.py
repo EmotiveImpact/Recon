@@ -20,7 +20,6 @@ SOURCE = {
                "by TDLR as open data (no marketing restriction stated)",
     "updated": "daily",
     "fields": "business name, owner name, business address, phone, licence type, licence number",
-    "pending": "professional licence register: waiting on Edem's decision",
 }
 
 # Business licence types, with the kind of business in plain words.

@@ -147,8 +147,13 @@ def oregon_rows(cache):
     for row in socrata("data.oregon.gov", "tckn-sxa6", cache, select=columns):
         if row["entity_type"] in ("RESERVED NAME", "REGISTERED NAME"):
             continue
-        entry = found.setdefault(row["registry_number"], {"row": row, "places": {}, "people": []})
+        entry = found.setdefault(row["registry_number"],
+                                 {"row": row, "places": {}, "people": [], "owner": ""})
         role = row["associated_name_type"]
+        # For an assumed business name, the entity of record is the owner; on
+        # a registered agent row it is only the agent's firm, so it is ignored.
+        if role != "REGISTERED AGENT" and row["entity_type"] == "ASSUMED BUSINESS NAME":
+            entry["owner"] = entry["owner"] or row["entity_of_record_name"]
         if role in ("PRINCIPAL PLACE OF BUSINESS", "MAILING ADDRESS"):
             entry["places"][role] = row
         elif role == "AUTHORIZED REPRESENTATIVE":
@@ -159,7 +164,7 @@ def oregon_rows(cache):
         row = entry["row"]
         place = (entry["places"].get("PRINCIPAL PLACE OF BUSINESS")
                  or entry["places"].get("MAILING ADDRESS") or {})
-        owner = row["entity_of_record_name"]
+        owner = entry["owner"]
         can, why = rule("US", None, CAN_SPAM)
         yield record(
             OREGON, number, row["business_name"],

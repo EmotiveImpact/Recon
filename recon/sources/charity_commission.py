@@ -69,4 +69,5 @@ def rows(cache):
                 phones=row["charity_contact_phone"],
                 registration_number=joined(row["registered_charity_number"],
                                            row["charity_company_registration_number"], sep="; "),
+                company_number=row["charity_company_registration_number"],
                 can_email=can, rule_reason=why)

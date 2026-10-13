@@ -31,7 +31,7 @@ FIELDS = [
     "record_id", "name", "other_name", "kind", "category", "legal_form", "status",
     "address", "town", "region", "postcode", "country",
     "website", "emails", "phones", "socials", "people",
-    "registration_number", "can_email", "rule_reason",
+    "registration_number", "company_number", "can_email", "rule_reason",
     "source", "source_id", "licence", "source_url", "fetched",
 ]
 
@@ -59,6 +59,9 @@ def record(source, source_id, name, **values):
     row["fetched"] = row["fetched"] or date.today().isoformat()
     row["emails"] = "; ".join(clean_emails(row["emails"]))
     row["phones"] = "; ".join(clean_phones(row["phones"], row["country"]))
+    if row["company_number"]:  # Companies House numbers are eight characters.
+        number = row["company_number"].upper().replace(" ", "")
+        row["company_number"] = number.zfill(8) if number.isdigit() else number
     if row["website"] and "://" not in row["website"]:
         row["website"] = "http://" + row["website"].strip()
     if row["postcode"]:
@@ -172,7 +175,11 @@ def joined(*parts, sep=", "):
 
 # Loader modules in this folder, in loading order.
 LOADERS = ["connecticut", "charity_commission", "washington_vendors", "fmcsa",
-           "care_inspectorate_scotland", "gias", "us_open_lists"]
+           "care_inspectorate_scotland", "gias", "us_open_lists",
+           "mot_stations", "nhs_ods", "marriage_venues", "food_hygiene", "companies_house_register",
+           "find_that_charity", "traffic_commissioners", "ofs_register", "uk_unions",
+           "irs_nonprofits", "us_colleges", "us_unions", "texas_tdlr", "nppes", "us_city_registers",
+           "virginia_dpor", "california_cslb"]
 
 
 def registry():

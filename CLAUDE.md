@@ -12,7 +12,7 @@ Read these in order before changing anything:
 Ground rules:
 - Plain British English everywhere, no em dashes. Edem is not technical: explain results in plain sentences.
 - The repository is public. Never commit contact data: data/ and out/ stay ignored.
-- Open data only. Never scrape Google Maps, booking platforms or professional registers. Never buy lists without Edem saying so.
+- Open data only. Never scrape Google Maps, booking platforms or the search pages of professional registers. Official bulk downloads that a government publishes for reuse (state licence files, regulators' registers) are allowed, honouring each source's terms (Edem, 13 October 2026). Never buy lists without Edem saying so.
 - When unsure whether a business may be emailed, the answer is "post only".
 - Recon finds; it does not send. Don't add sending without Edem's go-ahead and the safeguards in docs/RULES.md.
 - Standard library only, apart from DuckDB for Overture.

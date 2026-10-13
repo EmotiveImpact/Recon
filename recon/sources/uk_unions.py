@@ -169,8 +169,8 @@ def parse_return(text):
                 found["website"] = value.split()[0]
         elif re.match(r"(general secretary|chief executive|secretary)\b", label_l) and value:
             person = re.sub(r"\s*\(.*?\)\s*", " ", value).strip()
-            if not found["people"] and re.search(r"[a-z]{2}", person, re.I) and person.lower() not in (
-                    "n/a", "na", "none", "vacant", "tbc"):
+            if not found["people"] and re.search(r"[a-z]{2}", person, re.I) and not re.match(
+                    r"(n/?a|none|vacant|tbc)\b", person, re.I):
                 found["people"] = f"{person.title() if person.isupper() else person} ({label.strip(': ')})"
         elif label_l.startswith("telephone") and value:
             found["phones"].append(value)
