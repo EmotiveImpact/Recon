@@ -100,7 +100,8 @@ class SourceRuleTests(unittest.TestCase):
                 key="a", name="Pipe Ltd", sector="Plumbers", postcode="BS1 4DJ",
                 all_emails="info@pipe.co.uk", all_phones="0117 496 0000", company_number="123456",
                 company_match="exact", contact_rule="can email")])
-            with mock.patch.dict(os.environ, {"RECON_RUNS": folder}):
+            with mock.patch.dict(os.environ, {"RECON_RUNS": folder,
+                                              "RECON_TRADES": os.path.join(folder, "none")}):
                 found = list(recon_runs.rows(None))
         self.assertEqual(len(found), 1)
         r = found[0]

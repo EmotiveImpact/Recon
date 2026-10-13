@@ -5,13 +5,15 @@ matches them to Companies House and reads their own websites for emails and
 phones. Those contacts are what the registers lack, so the newest list for
 each target is loaded here and joins the register entries by company number,
 name and postcode, email or website. The folder is `out/` unless RECON_RUNS
-names another.
+names another. The UK trade sweep's lists (/mnt/project-files/master-db/trades/,
+or RECON_TRADES) are read too.
 """
 
 import glob
 import json
 import os
 import re
+from datetime import date
 
 from . import read_csv, record
 
@@ -48,9 +50,20 @@ def target_country(slug, folder="targets"):
         return "GB"
 
 
+def trade_lists(folder):
+    """Lists from the trade-by-trade sweep (<folder>/<trade>.csv, written in
+    Recon's export shape), as {slug: (day, path)}, dated by when they were saved."""
+    found = {}
+    for path in glob.glob(os.path.join(folder, "*.csv")):
+        day = date.fromtimestamp(os.path.getmtime(path)).isoformat()
+        found["trades-" + os.path.splitext(os.path.basename(path))[0]] = (day, path)
+    return found
+
+
 def rows(cache):
-    folder = os.environ.get("RECON_RUNS", "out")
-    for slug, (day, path) in sorted(newest_lists(folder).items()):
+    lists = newest_lists(os.environ.get("RECON_RUNS", "out"))
+    lists.update(trade_lists(os.environ.get("RECON_TRADES", "/mnt/project-files/master-db/trades")))
+    for slug, (day, path) in sorted(lists.items()):
         country = target_country(slug)
         for row in read_csv(path):
             can = row["contact_rule"] or "post only"
