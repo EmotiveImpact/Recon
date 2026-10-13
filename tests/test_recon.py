@@ -140,6 +140,17 @@ class EmailParsingTests(unittest.TestCase):
         self.assertEqual(emails.clean_candidates(page),
                          ["info@glowroom.co.uk", "hello@glowroom.co.uk"])
 
+    def test_long_runs_of_letters_are_quick(self):
+        # Inline images and minified scripts hold long runs of letters with no
+        # address in them; reading such a page must not take hours.
+        import time
+        page = ("data:image/png;base64," + "QUJD" * 250_000 + " info@glowroom.co.uk "
+                + "a." * 100_000 + " jo (at) glowroom (dot) co (dot) uk")
+        started = time.monotonic()
+        found = emails.clean_candidates(page)
+        self.assertLess(time.monotonic() - started, 5)
+        self.assertEqual(found, ["info@glowroom.co.uk", "jo@glowroom.co.uk"])
+
     def test_own_domain_and_shared_inbox_preferred(self):
         found = ["jane.smith@gmail.com", "jane@glowroom.co.uk", "info@glowroom.co.uk"]
         self.assertEqual(emails.best_email(found, "glowroom.co.uk"), "info@glowroom.co.uk")
