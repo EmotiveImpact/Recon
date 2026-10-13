@@ -46,7 +46,8 @@ class Workspace:
 
     def __init__(self, root, master=None):
         self.root = os.path.abspath(root)
-        self.directory = directory.Directory(master or directory.default_folder(self.root))
+        self.directory = directory.Directory(master or directory.default_folder(self.root),
+                                             geo=os.path.join(self.root, "data", "geo"))
         self.dashboard = dashboard.Dashboard(self.directory.folder)
         self.projects_dir = os.path.join(self.root, "projects")
         self.targets_dir = os.path.join(self.root, "targets")

@@ -190,10 +190,6 @@ class HttpTests(unittest.TestCase):
         self.assertIn("missing", body["error"])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class DirectoryTests(unittest.TestCase):
     def test_trade_words_are_cut_to_their_stem(self):
         self.assertEqual(directory.terms("Plumbers, heating engineer"),
@@ -222,6 +218,50 @@ class DirectoryTests(unittest.TestCase):
         self.assertEqual(found["by_area"], [{"area": "england", "count": 2}])
         with self.assertRaises(ValueError):
             directory.Directory(folder).files("uk", "../secrets")
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_search_near_a_postcode_or_town(self):
+        import duckdb
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder)
+        os.makedirs(os.path.join(folder, "uk"))
+        geo = os.path.join(folder, "geo")
+        os.makedirs(geo)
+        # Postcode centres as the website keeps them (made from GeoNames).
+        duckdb.sql(f"""COPY (SELECT * FROM (VALUES
+                ('BA11LZ', 'Bath', 'England', 'ENG', 'Somerset', 51.3811, -2.3601),
+                ('BA22AA', 'Bath', 'England', 'ENG', 'Somerset', 51.3900, -2.3700),
+                ('BS14DJ', 'Bristol', 'England', 'ENG', 'Bristol', 51.4545, -2.5879))
+              AS t(code, place, state, state_code, county, lat, lon))
+            TO '{geo}/uk-postcodes.parquet' (FORMAT parquet)""")
+        rows = [("BATH PLUMBING LTD", "BA1 1LZ", "can email"), ("AVON PLUMBERS", "ba2 2aa", "post only"),
+                ("BRISTOL PLUMBING LTD", "BS1 4DJ", "can email"), ("NOWHERE PLUMBING", "", "post only")]
+        values = ", ".join(f"('{n}', '{p}', '{r}')" for n, p, r in rows)
+        columns = ", ".join(f"NULL::VARCHAR AS {c}" for c in directory.COLUMNS
+                            if c not in ("name", "postcode", "can_email"))
+        duckdb.sql(f"""COPY (SELECT *, {columns} FROM (VALUES {values}) AS t(name, postcode, can_email))
+                       TO '{folder}/uk/england.parquet' (FORMAT parquet)""")
+        found = directory.Directory(folder, geo=geo)
+        self.assertEqual(found.locate("uk", "ba1 1lz")[:2], (51.3811, -2.3601))
+        self.assertEqual(found.locate("uk", "BA1")[:2], (51.3811, -2.3601))  # The district's middle.
+        self.assertEqual(found.locate("uk", "bath")[2], "Bath, England")
+        with self.assertRaises(LookupError):
+            found.locate("uk", "Atlantis")
+        near = found.search({"q": ["plumbers"], "near": ["Bath"], "miles": ["3"]})
+        self.assertEqual([r["name"] for r in near["rows"]], ["AVON PLUMBERS", "BATH PLUMBING LTD"])
+        self.assertLess(near["rows"][0]["miles"], 1)
+        self.assertEqual((near["total"], near["placed"], near["circle"]["miles"]), (2, 2, 3.0))
+        # Without a place, everyone is listed; those with a known postcode are mapped.
+        everyone = found.search({"q": ["plumbers"]})
+        self.assertEqual((everyone["total"], everyone["placed"], len(everyone["points"])), (4, 3, 3))
+        self.assertEqual(everyone["rows"][0]["lat"] != "", True)
+        path = found.export({"q": ["plumbers"], "near": ["BS1 4DJ"], "miles": ["1"]})
+        self.addCleanup(os.remove, path)
+        with open(path, encoding="utf-8") as handle:
+            exported = list(csv.DictReader(handle))
+        self.assertEqual([r["name"] for r in exported], ["BRISTOL PLUMBING LTD"])
+        self.assertEqual(exported[0]["lat"], "51.4545")
+
 
 
 class DashboardTests(unittest.TestCase):
@@ -276,3 +316,7 @@ class DashboardTests(unittest.TestCase):
             self.dash.places({"near": ["Nowhere-on-sea"]})
         with self.assertRaises(ValueError):
             self.dash.places({"trade": ["../etc"]})
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -457,3 +457,28 @@ td .name { font-weight: 600; }
 .money-facts span { font-size: 12px; color: var(--muted); }
 .trade-row { grid-template-columns: 1.3fr 1.6fr 0.6fr 0.8fr 0.8fr 20px; }
 @media (max-width: 860px) { .trade-row { grid-template-columns: 1.2fr 1fr 0.6fr 0.7fr 0.7fr; } }
+/* Map of search results */
+.map-wrap { position: relative; isolation: isolate; } /* Keeps the map's own layers under the details drawer. */
+.map { height: 460px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg-2); }
+.map-key { position: absolute; z-index: 500; left: 12px; bottom: 12px; display: flex; gap: 12px; padding: 6px 10px;
+  border-radius: 8px; background: rgba(11, 13, 20, 0.85); font-size: 12px; color: var(--muted); }
+.map-key i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.leaflet-container { font: inherit; }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--bg-2); color: var(--text);
+  border: 1px solid var(--line-2); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); }
+.leaflet-popup-content { margin: 12px 14px; max-height: 320px; overflow-y: auto; }
+.leaflet-container a.leaflet-popup-close-button { color: var(--muted); }
+.leaflet-control-attribution { font-size: 10.5px; }
+.pin-popup { display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; }
+.pin-count { color: var(--muted); font-size: 12px; }
+.pin-item { display: flex; flex-direction: column; gap: 3px; }
+.pin-item + .pin-item { border-top: 1px solid var(--line); padding-top: 10px; }
+.pin-name { font-weight: 650; font-size: 13.5px; }
+.pin-rule { align-self: flex-start; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 99px; }
+.pin-rule.good { color: var(--green); background: var(--green-bg); }
+.pin-rule.warn { color: var(--amber); background: var(--amber-bg); }
+.pin-line { color: var(--text); word-break: break-all; }
+a.pin-line { color: var(--accent-2); }
+.pin-more { align-self: flex-start; margin-top: 3px; padding: 3px 9px; font: inherit; font-size: 12px; cursor: pointer;
+  border-radius: 7px; border: 1px solid var(--line-2); background: var(--panel-2); color: var(--text); }
+.pin-more:hover { border-color: var(--accent); }

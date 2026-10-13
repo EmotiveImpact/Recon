@@ -19,7 +19,7 @@ It uses free, open data only. Nothing is bought and nothing is scraped from Goog
 
 ## The website
 
-Recon has a website. Its front page, **Find businesses**, searches the master database (every open register in one place, built with `python3 -m recon.master`): type a trade such as plumbers, pick the UK, the US or elsewhere and an area, and filter to those you may email or that list an email, phone or website. Each row shows which registers it came from, and the whole result downloads as a spreadsheet. The site finds the database in `data/master-db/`, in `RECON_MASTER`, or with `--master <folder>`.
+Recon has a website. Its front page, **Find businesses**, searches the master database (every open register in one place, built with `python3 -m recon.master`): type a trade such as plumbers, pick the UK, the US or elsewhere and an area, and filter to those you may email or that list an email, phone or website. Each row shows which registers it came from, and the whole result downloads as a spreadsheet. In the UK and the US you can also give a postcode, ZIP code or town and a distance ("plumbers within 5 miles of Cardiff"): the list is sorted nearest first, shows how far away each one is, and every match is pinned on a map, where clicking a pin shows its phone, email, website and whether you may email it. Positions come from GeoNames' free postcode file, downloaded once to `data/geo/`; the map is OpenStreetMap. The site finds the database in `data/master-db/`, in `RECON_MASTER`, or with `--master <folder>`.
 
 It also has everything below: projects (SALEANE first), target lists you can build by picking kinds of business, a Run button, and a results table you can filter and export.
 

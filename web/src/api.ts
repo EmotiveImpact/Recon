@@ -93,6 +93,11 @@ export type MasterResults = {
   by_area: { area: string; count: number }[];
   by_source: { source: string; count: number }[];
   rows: Row[];
+  // Set when the search is limited to a circle around a postcode or town.
+  circle: { lat: number; lon: number; miles: number; label: string } | null;
+  // On the first page: how many matches have a position, and up to 3,000 of them for the map.
+  placed: number;
+  points: Row[];
 };
 
 export type AreaCounts = { area: string; organisations: number; with_email: number; may_email: number; with_phone: number; with_website: number };
