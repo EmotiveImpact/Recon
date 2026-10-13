@@ -108,6 +108,23 @@ class SourceRuleTests(unittest.TestCase):
                          ("Pipe Ltd", "info@pipe.co.uk", "00123456", "can email", "2026-10-13"))
         self.assertEqual(r["record_id"], "recon-runs:plumbers-uk:a")
 
+    def test_overture_places(self):
+        from recon.sources import overture_places as o
+        gb = o.SOURCES[0].SOURCE
+        r = o.to_record(gb, "GB", "abc", "Pipe Ltd", "plumbing", ["https://pipe.co.uk",
+                        "https://facebook.com/pipeltd"], ["+44 117 496 0000"], ["Info@pipe.co.uk"],
+                        None, "1 Quay St", "Bristol", "ENG", "bs14dj")
+        self.assertEqual((r["emails"], r["website"], r["postcode"], r["can_email"], r["kind"]),
+                         ("info@pipe.co.uk", "https://pipe.co.uk", "BS1 4DJ", "can email", "plumbing"))
+        self.assertIn("facebook.com/pipeltd", r["socials"])
+        r = o.to_record(gb, "GB", "def", "Dave the Plumber", "plumbing", None, None,
+                        ["dave@gmail.com"], None, "", "Leeds", "", "LS1 1AA")
+        self.assertEqual(r["can_email"], "post only")
+        self.assertIn("personal webmail", r["rule_reason"])
+        us = o.SOURCES[1].SOURCE
+        self.assertEqual(o.to_record(us, "US", "x", "Joe's Plumbing", "plumbing", None, None, None,
+                                     None, "", "Austin", "TX", "78701")["can_email"], "can email")
+
     def test_every_loader_describes_its_source(self):
         for name, loader in sources.registry().items():
             for key in ("name", "title", "country", "url", "licence"):
