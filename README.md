@@ -8,8 +8,8 @@ It uses free, open data only. Nothing is bought and nothing is scraped from Goog
 
 ## What it does
 
-1. **Finds businesses** in [Overture Maps](https://overturemaps.org) (open data from Microsoft, Meta, Amazon and others) and [OpenStreetMap](https://www.openstreetmap.org), then joins duplicates.
-2. **Marks UK companies** using the free [Companies House](https://download.companieshouse.gov.uk/en_output.html) monthly file.
+1. **Finds businesses** in [Overture Maps](https://overturemaps.org) (open data from Microsoft, Meta, Amazon and others) and [OpenStreetMap](https://www.openstreetmap.org), then joins duplicates: records a few metres apart with alike names, or the same phone or website, become one row. OpenStreetMap comes from the country's daily download (2.6 GB for the UK, kept for a week in `data/osm/`), so no shared server is needed. A target can also name open registers, such as the Care Quality Commission's directory of dentists, clinics and care homes.
+2. **Marks UK companies** using the free [Companies House](https://download.companieshouse.gov.uk/en_output.html) monthly file. A match needs a name that shares a rare word with the company's, and a registered office close enough, measured with GeoNames' free postcode file (downloaded to `data/geo/` the first time). When unsure, the business stays "post only".
 3. **Applies the contact rules** for the country. In the UK, companies and LLPs may be emailed; sole traders and partnerships get post only. See [docs/RULES.md](docs/RULES.md).
 4. **Gathers every contact detail**: all emails (personal Gmail and Hotmail ones labelled), all phone numbers (mobiles told apart from landlines) and all social links, for every business, so you can see the full picture. Who may be emailed is still decided by step 3.
 5. **Names a person** at each company we may email: an active director from Companies House (needs a free API key).
@@ -20,7 +20,7 @@ It uses free, open data only. Nothing is bought and nothing is scraped from Goog
 ## Running it
 
 ```bash
-python3 -m pip install duckdb        # needed for Overture Maps
+python3 -m pip install duckdb        # needed for Overture Maps and OpenStreetMap
 # Download BasicCompanyDataAsOneFile from Companies House (about 470 MB, free)
 python3 -m recon run targets/saleane-uk.json --companies-house BasicCompanyData-2026-10-01.zip
 ```
@@ -54,11 +54,15 @@ To find Overture's exact category names for a new kind of business:
 
 ```bash
 python3 -m recon categories targets/saleane-uk.json --words groom yoga pilates
+# Without --words, it looks for the words in your sector names.
 ```
 
 ## Adding a project
 
-Copy `targets/saleane-uk.json`, give it the project name and country, and list the sectors with their Overture categories, OpenStreetMap tags and (UK only) Companies House trade codes. Nothing else changes.
+Copy `targets/saleane-uk.json`, give it the project name and country, and list the sectors with their Overture categories, OpenStreetMap tags and (UK only) Companies House trade codes. Nothing in the code is about salons, so any kind of business works. Two optional extras:
+
+- `"registers"`: open registers to read as well, such as `[{"preset": "cqc", "sector": "Dentists", "kinds": ["Dentist"]}]`, or any open CSV with its columns named. See `recon/registers.py`.
+- `"trade_words"`: words that describe the trade rather than name a business, in groups, when `recon/trades.json` does not already know them. Matching treats them as weak evidence, and names in different trades ("Luxe Nails", "Luxe Hair") are never joined.
 
 ## The spreadsheet
 
@@ -77,11 +81,11 @@ Copy `targets/saleane-uk.json`, give it the project name and country, and list t
 | `email_pattern`, `mail_server` | The pattern the business's addresses follow, and whether its domain takes email |
 | `contact_name`, `contact_role` | One director, for companies we may email |
 | `contact_email`, `contact_email_check`, `contact_email_confidence`, `contact_email_reason`, `contact_email_basis` | That person's address (published, or worked out from the pattern), its check, score and reason |
-| `source` | `overture`, `osm` or both |
+| `source`, `legal_name`, `other_names` | Where the row came from (`overture`, `osm`, a register such as `cqc`, or several), the operating organisation a register names, and any other names the joined sources gave the business |
 
 ## Credits
 
-Contains Overture Maps data (CDLA Permissive 2.0), © OpenStreetMap contributors (ODbL), and Companies House data (Open Government Licence). Keep these credits on anything shared outside the team.
+Contains Overture Maps data (CDLA Permissive 2.0), © OpenStreetMap contributors (ODbL), Companies House and Care Quality Commission data (Open Government Licence), postcode positions from [GeoNames](https://www.geonames.org) (CC BY 4.0, built on Royal Mail and Ordnance Survey open data), and the free-email-domains (MIT) and disposable-email-domains (CC0) lists. Keep these credits on anything shared outside the team.
 
 ## For the next agent
 
