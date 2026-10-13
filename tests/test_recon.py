@@ -133,6 +133,19 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(rules.contact_rule(places.blank(), "FR"), rules.CHECK)
 
 
+class DnsCacheTests(unittest.TestCase):
+    def test_prefill_looks_up_each_domain_once(self):
+        from unittest import mock
+        from recon import dns
+        asked = []
+        with mock.patch.object(dns, "mx_hosts", side_effect=lambda d, s=None: asked.append(d) or
+                               (dns.YES, ["mx." + d])):
+            cache = dns.Cache()
+            cache.prefill(["Glow.co.uk", "glow.co.uk", "", "pipe.co.uk"])
+            self.assertEqual(cache("glow.co.uk"), (dns.YES, ["mx.glow.co.uk"]))
+        self.assertEqual(sorted(asked), ["glow.co.uk", "pipe.co.uk"])
+
+
 class EmailParsingTests(unittest.TestCase):
     def test_junk_is_dropped(self):
         page = ('<img src="logo@2x.png"> info&#64;glowroom.co.uk '

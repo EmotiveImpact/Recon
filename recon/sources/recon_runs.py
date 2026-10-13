@@ -55,6 +55,9 @@ def trade_lists(folder):
     Recon's export shape), as {slug: (day, path)}, dated by when they were saved."""
     found = {}
     for path in glob.glob(os.path.join(folder, "*.csv")):
+        with open(path, encoding="utf-8-sig") as handle:
+            if "contact_rule" not in handle.readline():
+                continue  # A summary table, not a list of businesses.
         day = date.fromtimestamp(os.path.getmtime(path)).isoformat()
         found["trades-" + os.path.splitext(os.path.basename(path))[0]] = (day, path)
     return found
