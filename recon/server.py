@@ -317,7 +317,8 @@ def write_json(path, data):
 
 
 def clean_target(data):
-    """Check a target list from the site and keep only what Recon reads."""
+    """Check a target list from the site. Keys the site doesn't know (such as
+    ones a newer Recon adds) are kept as they are, so saving never loses them."""
     name = str(data.get("name", "")).strip()
     if not name:
         raise ValueError("A target list needs a name")
@@ -340,16 +341,22 @@ def clean_target(data):
                 tag = [str(pair[0]).strip(), str(pair[1]).strip()]
                 if tag not in osm:
                     osm.append(tag)
-        sectors[sector_name] = {"overture": words("overture"), "osm": osm, "sic": words("sic")}
+        sectors[sector_name] = {"overture": words("overture"), "osm": osm, "sic": words("sic"),
+                                **extras(sector, ("overture", "osm", "sic"))}
     if not sectors:
         raise ValueError("Add at least one kind of business")
     clean = {"name": name, "project": str(data.get("project", "")).strip(), "country": country,
-             "notes": str(data.get("notes", "")).strip(), "sectors": sectors}
+             "notes": str(data.get("notes", "")).strip(), "sectors": sectors,
+             **extras(data, ("name", "project", "country", "notes", "sectors", "box"))}
     if box:
         if len(box) != 4:
             raise ValueError("A map box needs four numbers: west, south, east, north")
         clean["box"] = [float(b) for b in box]
     return clean
+
+
+def extras(data, known):
+    return {key: value for key, value in data.items() if key not in known}
 
 
 class Runs:

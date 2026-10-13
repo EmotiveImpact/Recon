@@ -68,6 +68,14 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(saved["sectors"]["Dentists"]["osm"],
                          [["amenity", "dentist"], ["healthcare", "dentist"]])
 
+    def test_keys_the_site_doesnt_know_are_kept(self):
+        slug = self.workspace.save_target({
+            "name": "Kept", "country": "GB", "registers": ["fsa"],
+            "sectors": {"A": {"overture": ["spa"], "trade_words": {"spa": ["spa"]}}}})
+        saved = self.workspace.target(slug)
+        self.assertEqual(saved["registers"], ["fsa"])
+        self.assertEqual(saved["sectors"]["A"]["trade_words"], {"spa": ["spa"]})
+
     def test_bad_target_lists_are_refused(self):
         with self.assertRaises(ValueError):
             self.workspace.save_target({"name": "No sectors", "country": "GB", "sectors": {}})
