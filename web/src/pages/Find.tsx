@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Database, Download, ExternalLink, Globe, Mail, MapPin, Phone, Search, User, X } from "lucide-react";
+import { Database, Download, ExternalLink, Globe, Mail, Map as MapIcon, MapPin, Navigation, Phone, Search, User, X } from "lucide-react";
 import { api, type MasterResults, type MasterStatus, type Row } from "../api";
 import { fmt, pct, RuleBadge, splitList } from "../ui";
+import ResultsMap from "./ResultsMap";
 
 // Ready-made searches. Commas mean "or"; words are matched on their stem,
 // so "plumbers" also finds "plumbing".
@@ -52,6 +53,10 @@ const areaName = (group: string, area: string) =>
 
 const HAS: [string, string][] = [["email", "Has an email"], ["phone", "Has a phone"], ["website", "Has a website"], ["person", "Named person"]];
 const RULES: [string, string][] = [["", "Everyone"], ["can email", "Can email"], ["post only", "Post only"]];
+const MILES = ["1", "3", "5", "10", "25", "50"];
+// Distances need postcode positions, which Recon has for the UK and the US.
+const MAPPED = ["uk", "us"];
+const miles = (m: string) => `${Number(m) < 10 ? Number(m).toFixed(1) : Math.round(Number(m))} miles`;
 
 function Details({ row, group, onClose }: { row: Row; group: string; onClose: () => void }) {
   const list = (v: string) => splitList(v);
@@ -118,6 +123,7 @@ function Details({ row, group, onClose }: { row: Row; group: string; onClose: ()
             <dd>{[row.address, row.town, row.region, row.postcode].filter(Boolean).join(", ") || "Not known"}</dd>
             <dt>Area</dt>
             <dd>{areaName(group, row.area)}</dd>
+            {row.miles !== "" && row.miles != null && (<><dt>Distance</dt><dd>{miles(row.miles)} away</dd></>)}
             {row.category && (<><dt>What it does</dt><dd className="small">{row.category.length > 600 ? row.category.slice(0, 600) + "…" : row.category}</dd></>)}
             <dt>Found in</dt>
             <dd>{row.sources.split(";").map((s) => s.trim()).filter(Boolean).join(", ")}</dd>
@@ -139,6 +145,11 @@ export default function Find() {
   const [kind, setKind] = useState("");
   const [kinds, setKinds] = useState<{ kind: string; count: number }[]>([]);
   const [town, setTown] = useState("");
+  const [nearTyped, setNearTyped] = useState("");
+  const [near, setNear] = useState("");
+  const [radius, setRadius] = useState("5");
+  const [mapData, setMapData] = useState<MasterResults | null>(null);
+  const [showMap, setShowMap] = useState(true);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<MasterResults | null>(null);
   const [busy, setBusy] = useState(false);
@@ -151,6 +162,8 @@ export default function Find() {
   }, []);
   useEffect(() => {
     setArea("");
+    setNear("");
+    setNearTyped("");
     setKind("");
     if (status?.available) api.masterKinds(group).then(setKinds, () => setKinds([]));
   }, [group, status?.available]);
@@ -161,10 +174,14 @@ export default function Find() {
     if (q.trim()) p.set("q", q.trim());
     if (rule) p.set("rule", rule);
     if (kind) p.set("kind", kind);
-    if (town.trim()) p.set("town", town.trim());
+    if (town.trim() && !MAPPED.includes(group)) p.set("town", town.trim());
+    if (near.trim() && MAPPED.includes(group)) {
+      p.set("near", near.trim());
+      p.set("miles", radius);
+    }
     has.forEach((h) => p.append("has", h));
     return p;
-  }, [group, area, q, rule, kind, town, has]);
+  }, [group, area, q, rule, kind, town, near, radius, has]);
 
   useEffect(() => setPage(1), [query]);
   useEffect(() => {
@@ -173,7 +190,12 @@ export default function Find() {
     p.set("page", String(page));
     setBusy(true);
     api.masterSearch(p).then(
-      (d) => { setData(d); setError(""); setBusy(false); },
+      (d) => {
+        setData(d);
+        if (d.page === 1) setMapData(d); // The map only comes with the first page.
+        setError("");
+        setBusy(false);
+      },
       (e) => { setError(e.message); setBusy(false); },
     );
   }, [query, page, status?.available]);
@@ -183,6 +205,7 @@ export default function Find() {
   const pages = data ? Math.max(1, Math.ceil(data.total / data.size)) : 1;
   const toggle = (h: string) => setHas((now) => (now.includes(h) ? now.filter((x) => x !== h) : [...now, h]));
   const search = (text: string) => { setTyped(text); setQ(text); };
+  const mapped = MAPPED.includes(group);
 
   if (status && !status.available) {
     return (
@@ -211,7 +234,7 @@ export default function Find() {
             <Database size={14} /> {showSources ? "Hide" : "Show"} the sources
           </button>
         </div>
-        <form className="hero-search" onSubmit={(e) => { e.preventDefault(); setQ(typed); }}>
+        <form className="hero-search" onSubmit={(e) => { e.preventDefault(); setQ(typed); setNear(nearTyped); }}>
           <div className="search big">
             <Search size={20} />
             <input className="input" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="What kind of business? For example plumbers, or dental, dentist" />
@@ -226,6 +249,23 @@ export default function Find() {
             ))}
           </select>
           <button className="btn primary" type="submit"><Search size={16} /> Search</button>
+          {mapped && (
+            <>
+              <div className="search">
+                <Navigation size={16} />
+                <input className="input" value={nearTyped} onChange={(e) => setNearTyped(e.target.value)}
+                  placeholder={group === "uk" ? "Near a postcode or town (optional), for example BS1 4DJ or Bath" : "Near a ZIP code or town (optional), for example 78701 or Austin, TX"} />
+              </div>
+              <select className="input select" value={radius} onChange={(e) => setRadius(e.target.value)} aria-label="How far">
+                {MILES.map((m) => <option key={m} value={m}>Within {m} {m === "1" ? "mile" : "miles"}</option>)}
+              </select>
+              {near && (
+                <button className="btn ghost" type="button" onClick={() => { setNear(""); setNearTyped(""); }}>
+                  <X size={15} /> Anywhere
+                </button>
+              )}
+            </>
+          )}
         </form>
         <div className="chips">
           {PICKS.map(([label, words]) => (
@@ -268,6 +308,28 @@ export default function Find() {
             <div className="stat pink"><b>{fmt(data.with_phone)}</b><span>have a phone</span></div>
             <div className="stat"><b>{fmt(data.with_website)}</b><span>have a website</span></div>
           </div>
+
+          {mapped && mapData && (
+            <div className="card stack" style={{ marginBottom: 18 }}>
+              <div className="spread">
+                <div>
+                  <h3>
+                    {mapData.circle ? `Within ${mapData.circle.miles} ${mapData.circle.miles === 1 ? "mile" : "miles"} of ${mapData.circle.label}` : "On the map"}
+                  </h3>
+                  <p className="small muted">
+                    {mapData.placed > mapData.points.length
+                      ? `Showing the best ${fmt(mapData.points.length)} of ${fmt(mapData.placed)}, those you may email first. Pick a postcode or town above to see every one nearby.`
+                      : `${fmt(mapData.placed)} of ${fmt(mapData.total)} have a postcode we can place.`}
+                    {" "}Each pin sits at the middle of the postcode. Click one for the phone, email and website.
+                  </p>
+                </div>
+                <button className="btn ghost small" onClick={() => setShowMap(!showMap)}>
+                  <MapIcon size={14} /> {showMap ? "Hide" : "Show"} the map
+                </button>
+              </div>
+              {showMap && <ResultsMap data={mapData} group={group} onOpen={setOpen} />}
+            </div>
+          )}
 
           <div className="two-up" style={{ marginBottom: 18 }}>
             <div className="card stack">
@@ -320,10 +382,12 @@ export default function Find() {
                 <option value="">Every kind of organisation</option>
                 {kinds.map((k) => <option key={k.kind} value={k.kind}>{k.kind} ({fmt(k.count)})</option>)}
               </select>
-              <div className="search" style={{ width: 260 }}>
-                <MapPin size={16} />
-                <input className="input" placeholder="Town or postcode start" value={town} onChange={(e) => setTown(e.target.value)} />
-              </div>
+              {!mapped && (
+                <div className="search" style={{ width: 260 }}>
+                  <MapPin size={16} />
+                  <input className="input" placeholder="Town or postcode start" value={town} onChange={(e) => setTown(e.target.value)} />
+                </div>
+              )}
               <div style={{ flex: 1 }} />
               <a className="btn primary" href={api.masterExportUrl(query)}>
                 <Download size={15} /> Download {fmt(Math.min(data.total, 1000000))} as a spreadsheet
@@ -334,7 +398,7 @@ export default function Find() {
           <div className="table-wrap" style={{ opacity: busy ? 0.5 : 1 }}>
             <table>
               <thead>
-                <tr><th>Organisation</th><th>Where</th><th>May we email?</th><th>Email</th><th>Phone</th><th>Found in</th></tr>
+                <tr><th>Organisation</th><th>Where</th>{data.circle && <th>Distance</th>}<th>May we email?</th><th>Email</th><th>Phone</th><th>Found in</th></tr>
               </thead>
               <tbody>
                 {data.rows.map((row, i) => {
@@ -350,6 +414,7 @@ export default function Find() {
                         {row.town || <span className="faint">-</span>}
                         <div className="cell-sub">{[row.postcode, areaName(group, row.area)].filter(Boolean).join(" · ")}</div>
                       </td>
+                      {data.circle && <td style={{ whiteSpace: "nowrap" }}>{row.miles !== "" ? miles(row.miles) : "-"}</td>}
                       <td><RuleBadge rule={row.can_email} /></td>
                       <td>
                         {emails[0] ? <span style={{ wordBreak: "break-all" }}>{emails[0]}</span> : <span className="faint">None listed</span>}
