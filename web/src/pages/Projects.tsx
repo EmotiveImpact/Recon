@@ -103,7 +103,7 @@ export default function Projects({ projects, refresh }: { projects: Project[]; r
             setAdding(false);
             refresh();
             if (slug) go(`/p/${slug}`);
-            else if (query.get("new")) go("/");
+            else if (query.get("new")) go("/projects");
           }}
         />
       )}

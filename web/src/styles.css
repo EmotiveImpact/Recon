@@ -268,3 +268,17 @@ td .name { font-weight: 600; }
   .grid { grid-template-columns: 1fr; }
   .kv { grid-template-columns: 1fr; }
 }
+
+/* Find businesses */
+.hero { padding: 26px; margin-bottom: 22px; border-radius: 18px; border: 1px solid var(--line);
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.14), rgba(34, 211, 238, 0.06)); display: grid; gap: 16px; }
+.hero-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.hero-search { display: grid; grid-template-columns: 1fr 210px 210px auto; gap: 10px; }
+.search.big .input { padding: 14px 14px 14px 44px; font-size: 16px; }
+.search.big svg { left: 14px; }
+.two-up { display: grid; gap: 16px; grid-template-columns: 1.2fr 1fr; }
+.bar-row { display: grid; grid-template-columns: 170px 1fr 90px; gap: 14px; padding: 4px 6px; text-align: left; }
+@media (max-width: 860px) {
+  .hero-search, .two-up { grid-template-columns: 1fr; }
+  .bar-row { grid-template-columns: 110px 1fr 70px; }
+}

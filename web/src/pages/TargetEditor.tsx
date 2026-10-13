@@ -215,7 +215,7 @@ export default function TargetEditor({ slug, project, projects }: { slug?: strin
       <div className="page-head">
         <div>
           <div className="crumbs">
-            <a href="#/">Projects</a> /
+            <a href="#/projects">Projects</a> /
             {owner && <a href={`#/p/${owner.slug}`}>{owner.name}</a>} / {slug ? "Edit target list" : "New target list"}
           </div>
           <h1>{slug ? target.name || "Target list" : "New target list"}</h1>

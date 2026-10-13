@@ -224,7 +224,7 @@ export default function Results({ slug, projects }: { slug: string; projects: Pr
       <div className="page-head">
         <div>
           <div className="crumbs">
-            <a href="#/">Projects</a> /
+            <a href="#/projects">Projects</a> /
             {project && <a href={`#/p/${project.slug}`}>{project.name}</a>} / {target?.name ?? slug}
           </div>
           <h1>{target && <span style={{ marginRight: 10 }}>{FLAGS[target.country] ?? "🌍"}</span>}{target?.name ?? slug}</h1>

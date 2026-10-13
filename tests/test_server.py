@@ -1,5 +1,6 @@
 """Offline tests for the website's server (recon/server.py)."""
 
+import importlib.util
 import json
 import os
 import re
@@ -11,7 +12,7 @@ import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
 
-from recon import places, server
+from recon import directory, places, server
 
 HERE = os.path.dirname(__file__)
 
@@ -190,3 +191,33 @@ class HttpTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DirectoryTests(unittest.TestCase):
+    def test_trade_words_are_cut_to_their_stem(self):
+        self.assertEqual(directory.terms("Plumbers, heating engineer"),
+                         [["plumb"], ["heat", "engine"]])
+        self.assertEqual(directory.stem("salons"), "salon")
+        self.assertEqual(directory.stem("gym"), "gym")
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_search_finds_whole_words_and_counts(self):
+        import duckdb
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder)
+        os.makedirs(os.path.join(folder, "uk"))
+        rows = [("PIPE PLUMBING LTD", "company", "43220 - Plumbing", "can email", "a@pipe.co.uk"),
+                ("PLUMBLAND VILLAGE HALL", "charity", "Village hall", "post only", ""),
+                ("JO PLUMBER", "company", "", "post only", "")]
+        values = ", ".join(f"('{n}', '{k}', '{c}', '{r}', '{e}')" for n, k, c, r, e in rows)
+        columns = ", ".join(f"NULL::VARCHAR AS {c}" for c in directory.COLUMNS
+                            if c not in ("name", "kind", "category", "can_email", "emails"))
+        duckdb.sql(f"""COPY (SELECT *, {columns} FROM (VALUES {values})
+                             AS t(name, kind, category, can_email, emails))
+                       TO '{folder}/uk/england.parquet' (FORMAT parquet)""")
+        found = directory.Directory(folder).search({"q": ["plumbers"], "group": ["uk"]})
+        self.assertEqual(sorted(r["name"] for r in found["rows"]), ["JO PLUMBER", "PIPE PLUMBING LTD"])
+        self.assertEqual((found["total"], found["with_email"], found["may_email"]), (2, 1, 1))
+        self.assertEqual(found["by_area"], [{"area": "england", "count": 2}])
+        with self.assertRaises(ValueError):
+            directory.Directory(folder).files("uk", "../secrets")

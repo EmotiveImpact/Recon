@@ -71,6 +71,30 @@ export type Setup = {
   ready_score: number;
 };
 
+export type MasterArea = { area: string; organisations?: number; with_email?: number; may_email?: number; with_phone?: number; with_website?: number };
+
+export type MasterSource = { name: string; title: string; country: string; url: string; licence: string; records: string; with_email: string };
+
+export type MasterStatus = {
+  available: boolean;
+  folder: string | null;
+  groups?: Record<string, MasterArea[]>;
+  sources?: MasterSource[];
+};
+
+export type MasterResults = {
+  total: number;
+  with_email: number;
+  may_email: number;
+  with_phone: number;
+  with_website: number;
+  page: number;
+  size: number;
+  by_area: { area: string; count: number }[];
+  by_source: { source: string; count: number }[];
+  rows: Row[];
+};
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const response = await fetch("/api/" + path, {
     method,
@@ -100,6 +124,10 @@ export const api = {
   startRun: (target: string, step: string, options: Record<string, unknown>) =>
     call<Run>("POST", "runs", { target, step, options }),
   stopRun: (id: string) => call<Run>("POST", `runs/${id}/stop`),
+  master: () => call<MasterStatus>("GET", "master"),
+  masterSearch: (query: URLSearchParams) => call<MasterResults>("GET", `master/search?${query}`),
+  masterKinds: (group: string) => call<{ kind: string; count: number }[]>("GET", `master/kinds?group=${group}`),
+  masterExportUrl: (query: URLSearchParams) => `/api/master/export?${query}`,
   categories: (country: string, words: string[]) =>
     call<{ category: string; places: number }[]>("POST", "categories", { country, words }),
 };

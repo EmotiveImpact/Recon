@@ -28,7 +28,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import finder, places
+from . import directory, finder, places
 from .target import COUNTRY_BOX, Target
 
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
@@ -44,8 +44,9 @@ def slugify(name):
 class Workspace:
     """Files on disk, under one folder (the repository by default)."""
 
-    def __init__(self, root):
+    def __init__(self, root, master=None):
         self.root = os.path.abspath(root)
+        self.directory = directory.Directory(master or directory.default_folder(self.root))
         self.projects_dir = os.path.join(self.root, "projects")
         self.targets_dir = os.path.join(self.root, "targets")
         self._results = {}  # path -> (mtime, rows)
@@ -522,6 +523,14 @@ def handler_for(workspace, site):
                     name = f"{slug}-{time.strftime('%Y-%m-%d')}.csv"
                     return self._send(200, workspace.export(slug, query), "text/csv; charset=utf-8",
                                       {"Content-Disposition": f'attachment; filename="{name}"'})
+            if route == ("GET", "master"):
+                return self._json(workspace.directory.status())
+            if route == ("GET", "master", "search"):
+                return self._json(workspace.directory.search(query))
+            if route == ("GET", "master", "kinds"):
+                return self._json(workspace.directory.kinds(one(query, "group", "uk")))
+            if route == ("GET", "master", "export"):
+                return self._file(workspace.directory.export(query))
             if route == ("GET", "runs"):
                 return self._json(workspace.runs.list())
             if route == ("POST", "runs"):
@@ -538,6 +547,23 @@ def handler_for(workspace, site):
                 return self._json(find_categories(body.get("country", "GB"), body.get("words", []),
                                                   body.get("release")))
             return self._json({"error": "Not found"}, 404)
+
+        def _file(self, path):
+            """Send a CSV made for this request, then delete it."""
+            name = f"recon-businesses-{time.strftime('%Y-%m-%d')}.csv"
+            try:
+                size = os.path.getsize(path)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Length", str(size + 3))
+                self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+                self.end_headers()
+                self.wfile.write("\ufeff".encode("utf-8"))  # So Excel reads accents and £.
+                with open(path, "rb") as handle:
+                    while chunk := handle.read(1 << 20):
+                        self.wfile.write(chunk)
+            finally:
+                os.remove(path)
 
         def _static(self, path):
             if not site or not os.path.isdir(site):
@@ -591,8 +617,10 @@ def main(argv=None):
     parser.add_argument("--host", default="127.0.0.1",
                         help="defaults to this computer only; the results are private")
     parser.add_argument("--root", default=".", help="the Recon folder (default: here)")
+    parser.add_argument("--master", help="the master database folder (from recon.master); "
+                                         "found by itself in data/master-db or RECON_MASTER")
     args = parser.parse_args(argv)
-    workspace = Workspace(args.root)
+    workspace = Workspace(args.root, args.master)
     site = os.path.join(workspace.root, "web", "dist")
     server = ThreadingHTTPServer((args.host, args.port), handler_for(workspace, site))
     print(f"Recon is open at http://{'localhost' if args.host == '127.0.0.1' else args.host}:"

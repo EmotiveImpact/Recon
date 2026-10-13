@@ -66,7 +66,7 @@ export default function ProjectPage({ slug, projects, refresh }: { slug: string;
     <>
       <div className="page-head">
         <div>
-          <div className="crumbs"><a href="#/">Projects</a> / {project.name}</div>
+          <div className="crumbs"><a href="#/projects">Projects</a> / {project.name}</div>
           <h1>{project.name}</h1>
           {project.description && <p className="lede">{project.description}</p>}
         </div>
