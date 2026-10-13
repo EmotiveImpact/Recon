@@ -140,12 +140,20 @@ def group(rows):
     return dict(db.execute("SELECT record_id, group_id FROM groups").fetchall())
 
 
-def _connect(out=None):
+def _connect(out=None, work=""):
+    """A DuckDB connection. With a work name the tables live in a file in out,
+    stored compressed, so the joining fits on a small disk."""
     try:
         import duckdb
     except ImportError as error:
         raise SystemExit("This step needs DuckDB: pip install duckdb") from error
-    db = duckdb.connect()
+    path = ":memory:"
+    if work:
+        path = os.path.join(out, f".{work}.duckdb")
+        for leftover in (path, path + ".wal"):
+            if os.path.exists(leftover):
+                os.remove(leftover)
+    db = duckdb.connect(path)
     db.execute("SET preserve_insertion_order=false")
     db.execute("SET enable_progress_bar=false")
     db.execute("SET memory_limit='8GB'")
@@ -164,7 +172,7 @@ def combine(out, names):
     """Join the written sources into master.parquet and organisations.parquet.
     Rows are streamed from the source files rather than held in memory, so
     tens of millions fit on a small machine."""
-    db = _connect(out)
+    db = _connect(out, work="combine")
     files = [_source_path(out, n) for n in names if os.path.exists(_source_path(out, n))]
     keys_path = os.path.join(out, "keys.csv.part")
 
@@ -248,7 +256,7 @@ def _nation_sql(postcode):
 def segment(out):
     """Split the organisations by country: <out>/uk/<nation>.parquet and
     <out>/us/<state>.parquet, plus a counts file for each country."""
-    db = _connect(out)
+    db = _connect(out, work="segment")
     organisations = os.path.join(out, "organisations.parquet")
     parts = {
         "uk": ("country = 'GB'", _nation_sql("postcode")),
