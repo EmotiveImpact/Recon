@@ -267,6 +267,8 @@ class Directory:
                  circle["lon"] - reach, circle["lon"] + reach]).fetchall()
         names = {"unknown"}
         for state, code in rows:
+            if not state:  # Jersey, Guernsey and the Isle of Man have no nation.
+                names.add("crown-dependencies")
             names.add(re.sub(r"[^a-z0-9]+", "-", (state or "").lower()).strip("-"))
             names.add((code or "").lower())
         kept = [f for f in files if os.path.splitext(os.path.basename(f))[0] in names]
