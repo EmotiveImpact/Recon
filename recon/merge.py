@@ -11,6 +11,7 @@ import math
 import re
 
 from . import text
+from .words import Vocabulary
 
 # Columns holding several values: every source's values are kept.
 LISTS = {"all_emails": "; ", "all_phones": "; ", "socials": " "}
@@ -20,34 +21,6 @@ SOURCE_ORDER = {"overture": 0, "osm": 1, "companies_house": 2}
 
 NEARBY_METRES = 120  # Map sources place the same shop up to a few dozen metres apart.
 
-# Words that say what a business does rather than which business it is. Two
-# salons called "Luxe Nails" and "Luxe Hair" next door are different
-# businesses, so each word also names its trade.
-TRADE_WORDS = {
-    "hair": "hair", "hairs": "hair", "hairdresser": "hair", "hairdressers": "hair",
-    "hairdressing": "hair", "hairstylist": "hair", "hairstylists": "hair", "stylist": "hair",
-    "stylists": "hair", "barber": "hair", "barbers": "hair", "barbershop": "hair",
-    "barbering": "hair", "blowdry": "hair", "cutting": "hair", "cuts": "hair", "cut": "hair",
-    "salon": "", "salons": "",
-    "nail": "nails", "nails": "nails", "manicure": "nails", "pedicure": "nails",
-    "beauty": "beauty", "beautician": "beauty", "aesthetics": "beauty", "aesthetic": "beauty",
-    "skin": "beauty", "skincare": "beauty", "lash": "beauty", "lashes": "beauty",
-    "brow": "beauty", "brows": "beauty", "wax": "beauty", "waxing": "beauty",
-    "tan": "beauty", "tanning": "beauty", "laser": "beauty", "cosmetic": "beauty",
-    "spa": "spa", "massage": "spa", "therapy": "spa", "therapies": "spa", "wellness": "spa",
-    "wellbeing": "spa", "holistic": "spa", "sauna": "spa", "reflexology": "spa",
-    "tattoo": "tattoo", "tattoos": "tattoo", "tattooing": "tattoo", "piercing": "tattoo",
-    "piercings": "tattoo", "ink": "tattoo",
-    "physio": "health", "physiotherapy": "health", "physiotherapist": "health",
-    "chiropractic": "health", "chiropractor": "health", "osteopath": "health",
-    "osteopathy": "health", "osteopaths": "health", "clinic": "health", "health": "health",
-    "dog": "pets", "dogs": "pets", "pet": "pets", "pets": "pets", "grooming": "pets",
-    "groomer": "pets", "groomers": "pets",
-    "studio": "", "studios": "", "parlour": "", "lounge": "", "bar": "", "boutique": "",
-    "shop": "", "room": "", "rooms": "", "house": "", "lab": "", "collective": "",
-    "centre": "", "center": "", "care": "", "by": "", "of": "", "at": "", "and": "",
-}
-
 
 def _words(name, town=""):
     """A name's words, without company words or the town's name."""
@@ -55,30 +28,26 @@ def _words(name, town=""):
     return [w for w in text.name_key(name).split() if w not in drop]
 
 
-def _trades(words):
-    return {TRADE_WORDS[w] for w in words if TRADE_WORDS.get(w)}
-
-
 def _squash(words):
     return "".join(words)
 
 
-def alike(a, b, town_a="", town_b="", streets=""):
+def alike(a, b, town_a="", town_b="", streets="", vocab=None):
     """Whether two names could be the same business, once we already know the
     records are close together. Forgives word order, spacing ("Hair Studio",
     "Hairstudio"), plurals and a name being a shorter form of the other
     ("Taper Barbers", "Taper Barber Brighton"). Town and street words
     ("Southwick Barbers" on Southwick Square) do not count as the name."""
+    vocab = vocab or Vocabulary()
     full_a = _words(a, f"{town_a} {town_b}")
     full_b = _words(b, f"{town_a} {town_b}")
     where = set(text.name_key(streets).split())
     if not full_a or not full_b:
         return False
-    trades_a, trades_b = _trades(full_a), _trades(full_b)
-    if trades_a and trades_b and not trades_a & trades_b:
+    if vocab.different_trades(full_a, full_b):
         return False  # "Luxe Nails" is not "Luxe Hair".
-    core_a = [w for w in full_a if w not in TRADE_WORDS and w not in where]
-    core_b = [w for w in full_b if w not in TRADE_WORDS and w not in where]
+    core_a = [w for w in full_a if not vocab.is_trade(w) and w not in where]
+    core_b = [w for w in full_b if not vocab.is_trade(w) and w not in where]
     whole_a, whole_b = _squash(full_a).rstrip("s"), _squash(full_b).rstrip("s")
     if whole_a == whole_b:
         return True  # "City Barbers", "CityBarbers"; "Beauty Rooms", "Beauty Room".
@@ -130,16 +99,14 @@ def _site(url):
     return f"{text.domain(url)}/{page}"
 
 
-def same_business(a, b):
+def same_business(a, b, vocab):
     """Two nearby records are one business if their names are alike, or they
     give the same website or phone number, unless their names say they are in
     different trades."""
-    trades_a = _trades(_words(a["name"]))
-    trades_b = _trades(_words(b["name"]))
-    if trades_a and trades_b and not trades_a & trades_b:
+    if vocab.different_trades(_words(a["name"]), _words(b["name"])):
         return False
     streets = " ".join(re.sub(r"\d", " ", p["address"]) for p in (a, b))
-    if alike(a["name"], b["name"], a["town"], b["town"], streets):
+    if alike(a["name"], b["name"], a["town"], b["town"], streets, vocab):
         return True
     site_a, site_b = _site(a["website"]), _site(b["website"])
     if site_a and site_a == site_b:
@@ -161,7 +128,7 @@ def _short_hash(value):
     return hashlib.sha1(value.encode()).hexdigest()[:12]
 
 
-def _groups(everything):
+def _groups(everything, vocab):
     """Indexes of records that are one business, joined transitively."""
     parent = list(range(len(everything)))
 
@@ -191,7 +158,7 @@ def _groups(everything):
             for d_lon in (-1, 0, 1):
                 for j in cells.get((cell[0] + d_lat, cell[1] + d_lon), []):
                     if (_metres(where, _position(everything[j])) <= NEARBY_METRES
-                            and same_business(place, everything[j])):
+                            and same_business(place, everything[j], vocab)):
                         join(i, j)
         cells.setdefault(cell, []).append(i)
 
@@ -233,11 +200,12 @@ def _phone_flags(place):
         place["mobile_only"] = "yes" if all(k == "mobile" for k in kinds) else ""
 
 
-def combine(*groups):
+def combine(*groups, target=None):
     everything = sorted((p for group in groups for p in group),
                         key=lambda p: SOURCE_ORDER.get(p["source"], 9))
+    vocab = Vocabulary(target, [p["name"] for p in everything])
     combined = []
-    for members in _groups(everything):
+    for members in _groups(everything, vocab):
         kept = everything[members[0]]
         for i in members[1:]:
             _absorb(kept, everything[i])

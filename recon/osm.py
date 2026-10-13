@@ -166,6 +166,10 @@ def _connect():
     except ImportError as error:
         raise SystemExit("Reading OpenStreetMap needs DuckDB: pip install duckdb") from error
     db = duckdb.connect()
+    # A modest, fixed memory cap: DuckDB otherwise takes most of the
+    # computer's memory, and two runs at once can be killed for it.
+    db.execute("SET memory_limit = '2GB'")
+    db.execute("SET preserve_insertion_order = false")
     db.execute("INSTALL spatial")
     db.execute("LOAD spatial")
     return db

@@ -9,8 +9,8 @@ import threading
 import unittest
 import zipfile
 
-from recon import (companies_house, contacts, dns, emails, finder, hunter, mailbox, merge, osm,
-                   overture, patterns, people, places, rules, text, verify)
+from recon import (companies_house, contacts, dns, emails, finder, geo, hunter, mailbox, merge,
+                   osm, overture, patterns, people, places, registers, rules, text, verify, words)
 from recon.target import Target
 
 HERE = os.path.dirname(__file__)
@@ -598,7 +598,169 @@ class NearMatchTests(unittest.TestCase):
     def test_exact_matches_say_so(self):
         place = places.blank(name="Glow Room Beauty", postcode="BA1 1AA")
         companies_house.mark([place], self.INDEX)
-        self.assertEqual(place["company_match"], "same name")
+        self.assertEqual(place["company_match"], "same name, same postcode")
+
+
+def _registered(number, name, postcode, town, street=""):
+    return {"number": number, "name": name, "category": "Private Limited Company",
+            "postcode": postcode, "town": town, "street": street, "sector": "x"}
+
+
+def _index(*companies, filler=2000):
+    """An index with enough other companies for word rarity to mean something."""
+    index = {}
+    for n in range(filler):
+        word = "".join(chr(97 + int(d)) for d in str(n))  # 12 -> "bc"
+        companies += (_registered(f"F{n}", f"FILLER{word} HAIR LTD", "ZZ1 1ZZ", "nowhere"),)
+    for company in companies:
+        index.setdefault(text.name_key(company["name"]), []).append(company)
+    return index
+
+
+class RealMatchMistakeTests(unittest.TestCase):
+    """Mistakes the first matcher made on real Brighton and Bath data."""
+
+    def test_trade_words_and_the_town_prove_nothing(self):
+        # Seven Brighton salons were once matched to HAIR (BRIGHTON) LIMITED.
+        index = _index(_registered("10033656", "HAIR (BRIGHTON) LIMITED", "BN1 1AA", "brighton"))
+        found = [places.blank(name=name, postcode=postcode, town="Brighton")
+                 for name, postcode in [("Hair Studio Brighton", "BN1 3XX"),
+                                        ("The Hair Lounge", "BN1 4YY"), ("Hair by Jo", "BN1 1AA")]]
+        self.assertEqual(companies_house.mark(found, index), 0)
+
+    def test_bath_spa_nails(self):
+        # Two salons were once matched to BATH SPA NAILS LTD; only the one
+        # really called that, at its office, should be.
+        index = _index(_registered("1", "BATH SPA NAILS LTD", "BA1 1AA", "bath"))
+        luxury = places.blank(name="Luxury Nails - Bath Spa", postcode="BA1 2BB", town="Bath")
+        royal = places.blank(name="Royal Bath Spa Nails", postcode="BA1 5CC", town="Bath")
+        real = places.blank(name="Bath Spa Nails", postcode="BA1 1AA", town="Bath")
+        self.assertEqual(companies_house.mark([luxury, royal, real], index), 1)
+        self.assertEqual(real["company_number"], "1")
+
+    def test_one_company_does_not_take_differently_named_places(self):
+        index = _index(_registered("1", "LAZARUS HAIR LTD", "BN1 1AA", "brighton"))
+        near = places.blank(name="Lazarus", postcode="BN1 2BB", town="Brighton")
+        other = places.blank(name="Lazarus Hair Studio", postcode="BN1 3CC", town="Brighton")
+        self.assertEqual(companies_house.mark([near, other], index), 0)
+        at_office = places.blank(name="Lazarus Hair", postcode="BN1 1AA", town="Brighton")
+        self.assertEqual(companies_house.mark([near, other, at_office], index), 1)
+        self.assertEqual(at_office["company_number"], "1")
+
+    def test_a_shared_rare_word_is_enough_nearby(self):
+        index = _index(_registered("1", "LAZARUS HAIR LTD", "BN1 1AA", "brighton"))
+        place = places.blank(name="Lazarus", postcode="BN1 2BB", town="Brighton")
+        self.assertEqual(companies_house.mark([place], index), 1)
+
+    def test_in_the_next_town_the_whole_name_must_be_rare(self):
+        # Registered with an accountant in Radstock, the next town.
+        where = geo.Postcodes()
+        where.points = {"BA1 1AA": (51.381, -2.359), "BA3 3AA": (51.291, -2.448),
+                        "M1 1AA": (53.480, -2.237)}
+        common = [_registered(str(n), name, "BA3 3AA", "radstock") for n, name in
+                  enumerate(["BLISS HAIR LTD", "PURE BLISS HAIR LTD", "BLISS HAIR STUDIO LTD"])]
+        index = _index(*common, _registered("9", "NICK BRAIN HAIRDRESSING LTD", "BA3 3AA", "radstock"))
+        bliss = places.blank(name="Bliss Hair", postcode="BA1 1AA", town="Bath")
+        nick = places.blank(name="Nick Brain Hairdressing", postcode="BA1 1AA", town="Bath")
+        self.assertEqual(companies_house.mark([bliss, nick], index, postcodes=where), 1)
+        self.assertEqual(nick["company_number"], "9")
+        self.assertIn("km away", nick["company_match"])
+
+    def test_no_match_at_the_other_end_of_the_country(self):
+        where = geo.Postcodes()
+        where.points = {"BA1 1AA": (51.381, -2.359), "M1 1AA": (53.480, -2.237)}
+        index = _index(_registered("9", "NICK BRAIN HAIRDRESSING LTD", "M1 1AA", "manchester"))
+        nick = places.blank(name="Nick Brain Hairdressing", postcode="BA1 1AA", town="Bath")
+        self.assertEqual(companies_house.mark([nick], index, postcodes=where), 0)
+
+    def test_the_same_name_in_two_towns_is_not_matched_from_afar(self):
+        index = _index(_registered("9", "LAZARUS HAIR LTD", "M1 1AA", "manchester"))
+        bath = places.blank(name="Lazarus Hair", postcode="BA1 1AA", town="Bath")
+        leeds = places.blank(name="Lazarus Hair", postcode="LS1 1AA", town="Leeds")
+        self.assertEqual(companies_house.mark([bath, leeds], index), 0)
+
+
+class VocabularyTests(unittest.TestCase):
+    def test_any_trade_works(self):
+        vocab = words.Vocabulary()
+        self.assertTrue(vocab.different_trades(["smile", "dental"], ["smile", "cafe"]))
+        self.assertFalse(vocab.different_trades(["smile", "dental"], ["smile", "dentistry"]))
+        self.assertTrue(vocab.is_trade("Plumbers"))
+
+    def test_a_target_adds_its_own_words(self):
+        target = Target(name="t", country="GB", box=(0, 0, 1, 1),
+                        sectors={"Escape rooms": {"overture": ["escape_game_room"], "osm": []}},
+                        trade_words={"games": ["puzzle", "escape"], "food": ["pizza"]})
+        vocab = words.Vocabulary(target)
+        self.assertTrue(vocab.is_trade("escape"))
+        self.assertTrue(vocab.is_trade("game"))  # From the category's own name.
+        self.assertTrue(vocab.different_trades(["mystery", "puzzles"], ["mystery", "pizza"]))
+
+    def test_words_common_in_a_run_count_as_trade_words(self):
+        names = [f"Ace {n} Locksmiths" for n in range(10)] + ["Other"] * 10
+        self.assertTrue(words.Vocabulary(names=names).is_trade("locksmith"))
+
+    def test_folding(self):
+        self.assertEqual(words.tokens("Barbers' & Therapies Ltd"), ["barber", "therapy"])
+        self.assertEqual(words.tokens("Irini's Lashes"), ["irini", "lash"])
+
+    def test_other_trades_next_door_stay_apart(self):
+        combined = merge.combine([_spot("Smile Dental", 50.8235, -0.1402)],
+                                 [_spot("Smile Cafe", 50.82352, -0.14021, source="osm")])
+        self.assertEqual(len(combined), 2)
+
+
+class PostcodeTests(unittest.TestCase):
+    def test_reads_geonames_postcodes(self):
+        rows = ["GB\tBA1 1AA\tBath\tEngland\tENG\t\t\t\t\t51.381\t-2.359\t6",
+                "GB\tBA1 1AB\tBath\tEngland\tENG\t\t\t\t\t51.383\t-2.361\t6",
+                "GB\tM1 1AA\tManchester\tEngland\tENG\t\t\t\t\t53.48\t-2.237\t6"]
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "GB_full.csv.zip")
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("GB_full.txt", "\n".join(rows) + "\n")
+            where = geo.Postcodes(path, {"M1 1AA"})
+        self.assertEqual(where.find("M1 1AA"), (53.48, -2.237))
+        self.assertAlmostEqual(where.find("BA1 9ZZ")[0], 51.382)  # The district's middle.
+        self.assertIsNone(where.find("ZZ9 9ZZ"))
+
+
+class RegisterTests(unittest.TestCase):
+    CSV = ("CQC Locations data,,,,,,,,,,,,,,\n,,,,,,,,,,,,,,\n"
+           "Name,Also known as,Address,Postcode,Phone number,Service's website (if available),"
+           "Service types,Date of latest check,Specialisms/services,Provider name,Local authority,"
+           "Region,Location URL,CQC Location ID (for office use only),CQC Provider ID (for office use only)\n"
+           "Smile Dental,,\"1 High St,Bath\",BA1 1AA,1225111222,smiledental.co.uk,Dentist,,,"
+           "SMILE DENTAL LIMITED,,,,1-1,1-9\n"
+           "Dr Jo Bloggs Dental,,\"2 High St,Bath\",BA1 1AB,1225333444,,Dentist,,,Jo Bloggs,,,,1-2,1-8\n"
+           "Oak Care Home,,\"3 High St,Bath\",BA1 1AC,,,Residential homes,,,OAK CARE LTD,,,,1-3,1-7\n"
+           "Far Dental,,\"4 Main St,Leeds\",LS1 1AA,,,Dentist,,,FAR LTD,,,,1-4,1-6\n")
+
+    def test_cqc_rows_inside_the_box_and_of_the_right_kind(self):
+        target = Target(name="t", country="GB", sectors={}, box=(-2.5, 51.3, -2.2, 51.5))
+        where = geo.Postcodes()
+        where.points = {"BA1 1AA": (51.38, -2.36), "BA1 1AB": (51.38, -2.36),
+                        "BA1 1AC": (51.38, -2.36), "LS1 1AA": (53.8, -1.55)}
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "cqc.csv")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(self.CSV)
+            found = registers.read(target, {"preset": "cqc", "sector": "Dentists",
+                                            "kinds": ["Dentist"]}, path, where)
+        self.assertEqual([p["name"] for p in found], ["Smile Dental", "Dr Jo Bloggs Dental"])
+        smile, bloggs = found
+        self.assertEqual(smile["phone"], "01225 111222")
+        self.assertEqual(smile["website"], "https://smiledental.co.uk")
+        self.assertEqual(smile["legal_name"], "SMILE DENTAL LIMITED")
+        self.assertEqual(bloggs["legal_name"], "")  # A person's name is not kept.
+        self.assertEqual(smile["source"], "cqc")
+
+    def test_the_register_names_the_company(self):
+        index = _index(_registered("5", "SMILE DENTAL LIMITED", "M1 1AA", "manchester"), filler=0)
+        place = places.blank(name="Smile Dental", postcode="BA1 1AA", town="Bath", source="cqc",
+                             legal_name="SMILE DENTAL LIMITED")
+        self.assertEqual(companies_house.mark([place], index), 1)
+        self.assertEqual(place["company_match"], "named by the cqc register")
 
 
 class StructuredDataTests(unittest.TestCase):
@@ -711,6 +873,11 @@ class NearbyMergeTests(unittest.TestCase):
         a = _spot("Girl Talk Southwick Square", 50.8342, -0.2368, address="35 Southwick Square")
         b = _spot("Southwick Barbers", 50.83447, -0.23714, source="osm", address="Southwick Square")
         self.assertEqual(len(merge.combine([a], [b])), 2)
+
+    def test_one_shop_listed_twice_by_one_source_joins(self):
+        combined = merge.combine([_spot("Reach Physiotherapy", 50.8235, -0.1402),
+                                  _spot("Reach Physiotherapy", 50.82351, -0.14021)])
+        self.assertEqual(len(combined), 1)
 
     def test_same_name_far_apart_is_two_branches(self):
         combined = merge.combine([_spot("Glow Room", 50.8235, -0.1402)],

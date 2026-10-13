@@ -1,18 +1,37 @@
 # What to build next
 
-In rough order. Tick items off here as they land.
+One plan, combining the first real runs, the research into free data sources (the "Free business email sources for Recon" document) and the GitHub leads. Tick items off here as they land. The website (projects, target lists, runs and results in the browser) is built separately; target lists stay the same JSON files, and the new keys below are optional.
 
-1. **First real run** of `targets/saleane-uk.json` on Edem's computer. Note the counts per sector, the Companies House match rate and the share of websites with an email in THINKING.md.
-2. **Tune the categories** with `recon categories`, since Overture's names change between releases.
-3. **Suppression list**: one shared file of businesses and addresses that asked not to be contacted, checked by every export.
-4. **Postal export**: addresses laid out for a mail merge or a postcard printer, for the `post only` rows.
-5. **US target** for SALEANE (`targets/saleane-us.json`), once the UK campaign is working.
-6. **Instagram handles** from the map data's social links, for direct messages and ads audiences. The links are now collected in the `socials` column (Overture and OpenStreetMap); next is pulling out the Instagram handle on its own.
-7. **Scoring**: rank businesses by fit (for example, has its own website, several staff, in a city we focus on).
-8. **Sending**, kept separate from finding: a sender on its own domain, unsubscribe handling, the suppression list, and a record of what was sent to whom.
-9. **Phone screening** against the TPS and CTPS before any calling.
-10. ~~**Email finder**~~: done 13 October 2026. Patterns, named directors, mail record and mailbox checks, confidence scores, `recon find`, optional Hunter.
-11. **Mailbox checks from a small server**: rent one with port 25 open, run `recon verify --smtp-from` there, and record how many guesses are confirmed.
-12. **Names from the business's own site** (a "meet the team" page or its structured data) for companies whose directors don't match, and for US businesses, which have no Companies House.
+## Done
 
-Things decided against, so they are not reopened without a reason: scraping Google Maps, booking platforms or professional registers; buying lists; selling Recon as a product before it has proved itself on SALEANE.
+- ~~**First real run**~~ of `targets/saleane-uk.json`, 13 October 2026, in the cloud: 153,804 UK businesses, 17,957 may be emailed. Numbers in THINKING.md.
+- ~~**Email finder**~~: patterns, named directors, mail record and mailbox checks, confidence scores, `recon find`, optional Hunter.
+- ~~**Every contact detail**~~: all emails (personal ones labelled), phones (mobiles marked), social links, from Overture, OpenStreetMap and the websites.
+- ~~**OpenStreetMap from the daily download**~~, and duplicates joined by place and name.
+- ~~**Company matching that rarely guesses wrong**~~: rare shared words, real distances to registered offices, checked by hand on Brighton and Bath.
+- ~~**Any kind of business**~~: trade words come from `recon/trades.json` and the target list, not the code.
+- ~~**Open registers**~~: the CQC directory as a preset; any open CSV by naming its columns.
+- ~~**Full free-mail and throwaway lists**~~.
+
+## Next, in order
+
+1. **Postal export.** Most businesses are "post only" (88% across the UK), so the post campaign is the bigger one. Lay out names and addresses for a mail merge or a postcard printer.
+2. **Companies House API key** (free; Edem registers for one). It switches on named directors for the 17,957 companies, which is what makes a cold email land.
+3. **Suppression list**: one shared file of businesses and addresses that asked not to be contacted, checked by every export. Needed before any sending.
+4. **Mailbox checks from a small rented server** with port 25 open (a few pounds a month): run `recon verify --smtp-from` there, and record how many guessed addresses are confirmed.
+5. **Second look at unmatched businesses whose website says "Ltd"**: 17% of Brighton homepages mention Ltd or Limited, and 4% give a company number. Matching those by the number on the site is near certain.
+6. **More registers, one per trade as needed**: the Food Standards Agency's hygiene ratings (every café, restaurant and takeaway, Open Government Licence) for food projects; council special treatment licences for massage, nails and tattoo where a council publishes them openly.
+7. **Tune the categories** for each new business type with `recon categories`, since Overture's names change between releases.
+8. **Instagram handles** pulled out of the `socials` column, for direct messages and ad audiences.
+9. **Scoring**: rank businesses by fit (own website, several staff, in a city we focus on).
+10. **Names from the business's own site** (a "meet the team" page or its structured data) for companies whose directors don't match, and for US businesses.
+11. **US target** for SALEANE, once the UK campaign is working.
+12. **Phone screening** against the TPS and CTPS before any calling.
+13. **Sending**, kept separate from finding and only with Edem's go-ahead: a sender on its own domain, unsubscribe handling, the suppression list, and a record of what was sent to whom.
+
+## Measured and left for later
+
+- **People Data Labs' free company list** (2.4 GB, CC BY 4.0): fills a website for about 6% of businesses without one, right about 9 times in 10. Worth adding only with a check that the suggested site mentions the business.
+- **Common Crawl** for websites that fail: most failures are domains that no longer exist, which an archive cannot fix.
+
+Things decided against, so they are not reopened without a reason: scraping Google Maps, booking platforms or professional registers; buying lists; leaked or breached data; selling Recon as a product before it has proved itself on SALEANE.
