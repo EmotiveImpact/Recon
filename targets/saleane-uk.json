@@ -1,0 +1,48 @@
+{
+  "name": "SALEANE: UK studios",
+  "project": "SALEANE",
+  "country": "GB",
+  "notes": "Beauty, wellness, barber, tattoo, aesthetics, body and pet grooming studios that book clients one to one.",
+  "sectors": {
+    "Beauty and wellness": {
+      "overture": [
+        "hair_salon", "beauty_salon", "nail_salon", "spas", "day_spa", "health_spa",
+        "massage", "massage_therapy", "eyelash_service", "eyebrow_service", "waxing",
+        "hair_removal", "threading_service", "skin_care", "esthetician", "facial_spa",
+        "tanning_salon", "spray_tanning", "makeup_artist", "permanent_makeup",
+        "hair_extensions", "reflexology", "float_spa", "sauna", "beauty_and_spa"
+      ],
+      "osm": [
+        ["shop", "hairdresser"], ["shop", "beauty"], ["shop", "massage"],
+        ["leisure", "sauna"], ["amenity", "spa"], ["leisure", "spa"]
+      ],
+      "sic": ["96020", "96040"]
+    },
+    "Barbers and tattoo": {
+      "overture": ["barber", "tattoo", "tattoo_and_piercing", "piercing"],
+      "osm": [["shop", "tattoo"], ["shop", "piercing"], ["hairdresser", "barber"]],
+      "sic": []
+    },
+    "Aesthetics": {
+      "overture": ["medical_spa", "med_spa", "laser_hair_removal", "aesthetician"],
+      "osm": [],
+      "sic": []
+    },
+    "Body and health": {
+      "overture": [
+        "physical_therapy", "physiotherapist", "chiropractor", "osteopath",
+        "osteopathic_physician", "sports_massage"
+      ],
+      "osm": [
+        ["healthcare", "physiotherapist"], ["healthcare", "chiropractor"],
+        ["healthcare", "osteopath"]
+      ],
+      "sic": ["86900"]
+    },
+    "Pet grooming": {
+      "overture": ["pet_groomer", "pet_grooming"],
+      "osm": [["shop", "pet_grooming"]],
+      "sic": ["96090"]
+    }
+  }
+}

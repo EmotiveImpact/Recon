@@ -1,0 +1,14 @@
+# Recon's outputs hold business contact details. This repo is public:
+# never commit them.
+data/
+out/
+*.csv
+*.xlsx
+*.zip
+*.parquet
+*.jsonl
+!tests/**
+__pycache__/
+*.pyc
+.venv/
+.env
