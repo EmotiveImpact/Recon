@@ -12,10 +12,11 @@ import os
 import sys
 from datetime import date
 
-from . import companies_house, emails, merge, osm, overture, places, rules, verify
+from . import (companies_house, dns, emails, finder, hunter, mailbox, merge, osm, overture,
+               people, places, rules, text, verify)
 from .target import Target
 
-STEPS = ["places", "companies", "rules", "emails", "verify", "export"]
+STEPS = ["places", "companies", "rules", "people", "emails", "verify", "export"]
 
 
 def _paths(target_file):
@@ -65,19 +66,46 @@ def step_rules(target, store, args):
     print("Contact rules: " + ", ".join(f"{k} {v:,}" for k, v in counts.items()))
 
 
+def step_people(target, store, args):
+    rows = places.read(store)
+    print("Looking up who runs each company we may email (Companies House)…")
+    looked_up = people.fill(rows, os.path.join(os.path.dirname(store), "people-cache.jsonl"))
+    if looked_up is None:
+        print("  No RECON_COMPANIES_HOUSE_KEY set, so no names this time. The key is free from "
+              "https://developer.company-information.service.gov.uk/")
+        return
+    places.write(store, rows)
+    print(f"  {looked_up:,} companies looked up; "
+          f"{sum(1 for r in rows if r['contact_name']):,} businesses have a named director")
+
+
 def step_emails(target, store, args):
     rows = places.read(store)
+    folder = os.path.dirname(store)
+    cache = os.path.join(folder, "email-cache.jsonl")
     print("Looking for emails on businesses' own websites…")
-    emails.fill(rows, os.path.join(os.path.dirname(store), "email-cache.jsonl"),
-                everyone=args.all_emails, workers=args.workers)
+    emails.fill(rows, cache, everyone=args.all_emails, workers=args.workers)
+    lookup = None
+    if args.hunter:
+        if hunter.key():
+            print("  Hunter is switched on: each new domain uses one of your Hunter searches")
+            lookup = hunter.Lookup(os.path.join(folder, "hunter-cache.jsonl"))
+        else:
+            print("  --hunter needs RECON_HUNTER_KEY; carrying on without Hunter")
+    print("Working out address patterns and named contacts…")
+    finder.fill(rows, emails.load(cache), people.load(os.path.join(folder, "people-cache.jsonl")),
+                hunter=lookup, everyone=args.all_emails)
     places.write(store, rows)
-    print(f"  {sum(1 for r in rows if r['email']):,} businesses now have an email")
+    print(f"  {sum(1 for r in rows if r['email']):,} businesses now have an email; "
+          f"{sum(1 for r in rows if r['contact_email']):,} have a named person's address")
+    if lookup:
+        print(f"  {lookup.asked:,} Hunter searches used")
 
 
 def step_verify(target, store, args):
     rows = places.read(store)
     print("Checking emails…")
-    print(f"  {verify.fill(rows):,} checked")
+    print(f"  {verify.fill(rows, smtp_from=args.smtp_from):,} checked")
     places.write(store, rows)
 
 
@@ -88,18 +116,51 @@ def step_export(target, store, args, slug):
     places.write(out, rows)
     print(f"\n{target.name}: {len(rows):,} businesses written to {out}\n")
     table = collections.Counter((r["sector"], r["contact_rule"]) for r in rows)
-    with_email = collections.Counter(r["sector"] for r in rows
-                                     if r["email"] and r["contact_rule"] == "can email")
+    def ready(row, field):
+        confidence = row[f"{field}_confidence"]
+        return (row[field] and row["contact_rule"] == "can email"
+                and confidence != "" and int(confidence) >= finder.READY)
+
+    with_email = collections.Counter(r["sector"] for r in rows if ready(r, "email"))
+    with_person = collections.Counter(r["sector"] for r in rows if ready(r, "contact_email"))
     for sector in target.sectors:
         line = ", ".join(f"{rule} {n:,}" for (s, rule), n in sorted(table.items()) if s == sector)
-        print(f"  {sector}: {line or 'none'}; emails ready {with_email[sector]:,}")
+        print(f"  {sector}: {line or 'none'}; emails ready {with_email[sector]:,}, "
+              f"named people ready {with_person[sector]:,}")
+    print(f"  (ready means a confidence of {finder.READY} or more)")
+
+
+def find_one(args):
+    """recon find glowroom.co.uk --name "Sarah Jones": one person's likely address."""
+    ask = None
+    if verify.reacher_running():
+        ask = verify._reacher
+    elif args.smtp_from:
+        ask = mailbox.Checker(args.smtp_from).check
+    ranked, shared = finder.lookup(args.target, args.name, emails.crawl, dns.Cache(), ask)
+    print(f"Likely addresses for {args.name} at {text.domain(args.target)}, best first:")
+    for address, confidence, reason in ranked[:args.top]:
+        print(f"  {confidence:>3}  {address}\n       {reason}")
+    if shared:
+        print("Shared inboxes published on the site: " + ", ".join(shared))
+    print("Before emailing: in the UK, only email a person at a limited company or LLP. "
+          "Sole traders and partnerships need their consent first (docs/RULES.md).")
+    return 0
+
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="recon", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["run", "categories", *STEPS])
-    parser.add_argument("target", help="target list, such as targets/saleane-uk.json")
+    parser.add_argument("command", choices=["run", "categories", "find", *STEPS])
+    parser.add_argument("target", help="target list, such as targets/saleane-uk.json "
+                                       "(for 'find': the business's website or domain)")
+    parser.add_argument("--name", help="for 'find': the person's first and last name")
+    parser.add_argument("--top", type=int, default=5, help="for 'find': how many to show")
+    parser.add_argument("--smtp-from", help="your own email address: switches on the direct "
+                                            "mailbox check in 'verify' (needs port 25 open)")
+    parser.add_argument("--hunter", action="store_true",
+                        help="in 'emails', also ask Hunter (needs RECON_HUNTER_KEY; uses credits)")
     parser.add_argument("--companies-house", nargs="*", default=[],
                         help="Companies House free data zip or CSV files (UK only)")
     parser.add_argument("--overture-release", help="defaults to the newest")
@@ -111,6 +172,11 @@ def main(argv=None):
     parser.add_argument("--words", nargs="*", default=["hair", "beauty", "spa", "salon"],
                         help="for 'categories': words to look for in category names")
     args = parser.parse_args(argv)
+
+    if args.command == "find":
+        if not args.name:
+            parser.error("find needs --name, such as --name \"Sarah Jones\"")
+        return find_one(args)
 
     target = Target.load(args.target)
     slug, _, store = _paths(args.target)

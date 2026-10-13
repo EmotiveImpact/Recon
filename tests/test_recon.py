@@ -9,7 +9,8 @@ import threading
 import unittest
 import zipfile
 
-from recon import companies_house, emails, merge, osm, places, rules, text
+from recon import (companies_house, dns, emails, finder, hunter, mailbox, merge, osm,
+                   patterns, people, places, rules, text, verify)
 from recon.target import Target
 
 HERE = os.path.dirname(__file__)
@@ -198,6 +199,291 @@ class CrawlTests(unittest.TestCase):
             again = places.blank(name="A2", website=self.url, contact_rule=rules.CAN_EMAIL)
             self.assertEqual(emails.fill([again], cache, workers=1), 0)
             self.assertEqual(again["email_found_on"], allowed["email_found_on"])
+
+
+# A real reply from a public resolver to "outlook.com MX", and one saying a
+# domain does not exist.
+OUTLOOK_MX = bytes.fromhex(
+    "000081800001000100000000076f75746c6f6f6b03636f6d00000f0001c00c000f0001000000d1001f"
+    "00050b6f75746c6f6f6b2d636f6d036f6c630a70726f74656374696f6ec00c")
+NO_SUCH_DOMAIN = bytes.fromhex(
+    "000081830001000000010000196e6f6e6578697374656e742d7265636f6e2d746573742d7a7a02636f"
+    "02756b00000f0001c0260006000100000708003804646e7331036e6963c0290a686f73746d6173746572"
+    "076e6f6d696e6574036f7267c0296acdd336000003840000012c0024ea0000002a30")
+
+
+class DnsTests(unittest.TestCase):
+    def test_question_matches_what_resolvers_expect(self):
+        self.assertEqual(OUTLOOK_MX[12:29], dns.query("outlook.com", dns.MX, ident=0)[12:])
+
+    def test_mail_servers_are_read_from_a_real_reply(self):
+        code, truncated, answers = dns.parse(OUTLOOK_MX)
+        self.assertEqual((code, truncated), (0, False))
+        self.assertEqual(answers, [(dns.MX, (5, "outlook-com.olc.protection.outlook.com"))])
+
+    def test_missing_domain(self):
+        self.assertEqual(dns.parse(NO_SUCH_DOMAIN)[0], 3)
+
+    def test_no_mx_falls_back_to_the_domain_itself(self):
+        replies = {dns.MX: (0, []), dns.A: (0, [(dns.A, "192.0.2.1")])}
+        original = dns.lookup
+        dns.lookup = lambda name, qtype, servers=None: replies[qtype]
+        try:
+            self.assertEqual(dns.mx_hosts("glowroom.co.uk"), (dns.YES, ["glowroom.co.uk"]))
+            replies[dns.A] = (0, [])
+            self.assertEqual(dns.mx_hosts("glowroom.co.uk"), (dns.NO, []))
+            replies[dns.MX] = (None, [])
+            self.assertEqual(dns.mx_hosts("glowroom.co.uk"), (dns.UNKNOWN, []))
+        finally:
+            dns.lookup = original
+
+
+class PatternTests(unittest.TestCase):
+    def test_names_in_both_orders(self):
+        self.assertEqual(patterns.split_name("JONES, Sarah Jane"), ("sarah", "jones"))
+        self.assertEqual(patterns.split_name("Dr Sarah O'Brién"), ("sarah", "obrien"))
+        self.assertIsNone(patterns.split_name("Sarah"))
+
+    def test_making_addresses(self):
+        self.assertEqual(patterns.make("f.last", "sarah", "jones"), "s.jones")
+        self.assertEqual(patterns.make("firstl", "sarah", "jones"), "sarahj")
+
+    def test_pattern_learned_from_a_published_address(self):
+        people_ = [("sarah", "jones"), ("tom", "brown")]
+        found = ["info@glowroom.co.uk", "tbrown@glowroom.co.uk"]
+        self.assertEqual(patterns.learn(found, people_), ("flast", "matched"))
+
+    def test_shape_is_a_weaker_hint(self):
+        self.assertEqual(patterns.learn(["amy.wu@x.co.uk"], []), ("first.last", "shape"))
+        self.assertEqual(patterns.learn(["info@x.co.uk", "hello@x.co.uk"], []), ("", ""))
+
+    def test_patterns_seen_elsewhere_are_tried_first(self):
+        import collections
+        order = patterns.usual_order(collections.Counter({"f.last": 3}))
+        self.assertEqual(order[:2], ["f.last", "first"])
+
+    def test_hunter_pattern(self):
+        self.assertEqual(patterns.from_hunter("{first}.{last}"), "first.last")
+        self.assertEqual(patterns.from_hunter("{f}{last}"), "flast")
+        self.assertEqual(patterns.from_hunter("{nonsense}"), "")
+
+
+class HiddenEmailTests(unittest.TestCase):
+    def test_cloudflare_and_spelt_out_addresses(self):
+        scrambled = "42" + bytes(b ^ 0x42 for b in b"info@glowroom.co.uk").hex()
+        page = (f'<a href="/cdn-cgi/l/email-protection#{scrambled}">email</a>'
+                ' or write to sarah [at] glowroom [dot] co [dot] uk')
+        self.assertEqual(emails.clean_candidates(page),
+                         ["info@glowroom.co.uk", "sarah@glowroom.co.uk"])
+
+
+class PeopleTests(unittest.TestCase):
+    REPLY = {"items": [
+        {"name": "JONES, Sarah Jane", "officer_role": "director"},
+        {"name": "SMITH, Old", "officer_role": "director", "resigned_on": "2020-01-01"},
+        {"name": "ACME SECRETARIES LTD", "officer_role": "corporate-secretary"},
+        {"name": "BROWN, Tom", "officer_role": "secretary"},
+    ]}
+
+    def test_only_active_directors_who_are_people(self):
+        self.assertEqual(people.directors(self.REPLY), [{"name": "Sarah Jones", "role": "director"}])
+
+    def test_only_companies_we_may_email_with_a_website(self):
+        company = places.blank(company_number="01234567", website="https://glowroom.co.uk",
+                               contact_rule=rules.CAN_EMAIL)
+        sole_trader = places.blank(website="https://other.co.uk", contact_rule=rules.POST_ONLY)
+        asked = []
+        with tempfile.TemporaryDirectory() as folder:
+            cache = os.path.join(folder, "people.jsonl")
+            self.assertIsNone(people.fill([company], cache, key=""))
+            fetch = lambda number, key: asked.append(number) or self.REPLY
+            people.PAUSE, pause = 0, people.PAUSE
+            try:
+                self.assertEqual(people.fill([company, sole_trader], cache, "k", fetch), 1)
+            finally:
+                people.PAUSE = pause
+            self.assertEqual(people.load(cache)["01234567"][0]["name"], "Sarah Jones")
+        self.assertEqual(asked, ["01234567"])
+        self.assertEqual(company["contact_name"], "Sarah Jones")
+        self.assertEqual(sole_trader["contact_name"], "")
+
+
+class HunterTests(unittest.TestCase):
+    def test_off_without_a_key_and_asks_once_per_domain(self):
+        reply = {"data": {"pattern": "{first}", "emails": [
+            {"value": "Hello@glowroom.co.uk", "type": "generic", "confidence": 90}]}}
+        calls = []
+        with tempfile.TemporaryDirectory() as folder:
+            cache = os.path.join(folder, "hunter.jsonl")
+            self.assertIsNone(hunter.Lookup(cache, api_key="")("glowroom.co.uk"))
+            lookup = hunter.Lookup(cache, "k", lambda d, k: calls.append(d) or reply)
+            self.assertEqual(lookup("glowroom.co.uk")["emails"][0]["email"], "hello@glowroom.co.uk")
+            lookup("glowroom.co.uk")
+            self.assertEqual(hunter.Lookup(cache, api_key="")("glowroom.co.uk")["pattern"],
+                             "{first}")
+        self.assertEqual(calls, ["glowroom.co.uk"])
+
+
+class _FakeMailServer:
+    """Stands in for smtplib.SMTP: knows which mailboxes exist."""
+
+    def __init__(self, mailboxes, catch_all=False):
+        self.mailboxes, self.catch_all, self.asked = mailboxes, catch_all, []
+
+    def __call__(self, host, port, timeout):
+        return self
+
+    def ehlo(self, name):
+        return 250, b"hi"
+
+    def mail(self, sender):
+        return 250, b"ok"
+
+    def rcpt(self, address):
+        self.asked.append(address)
+        if self.catch_all or address in self.mailboxes:
+            return 250, b"ok"
+        return 550, b"5.1.1 user unknown"
+
+    def quit(self):
+        pass
+
+
+class MailboxTests(unittest.TestCase):
+    def test_says_which_mailboxes_exist(self):
+        server = _FakeMailServer({"sarah@glowroom.co.uk"})
+        checker = mailbox.Checker("me@saleane.com", "saleane.com", connect=server, pause=0)
+        found = checker.check("glowroom.co.uk", ["mx.glowroom.co.uk"],
+                              ["sarah@glowroom.co.uk", "sjones@glowroom.co.uk"])
+        self.assertEqual(found["sarah@glowroom.co.uk"][0], mailbox.SAFE)
+        self.assertEqual(found["sjones@glowroom.co.uk"][0], mailbox.INVALID)
+        self.assertTrue(server.asked[0].startswith("recon-check-"))
+
+    def test_catch_all_is_not_taken_as_proof(self):
+        checker = mailbox.Checker("me@saleane.com", "saleane.com",
+                                  connect=_FakeMailServer(set(), catch_all=True), pause=0)
+        found = checker.check("glowroom.co.uk", ["mx"], ["anyone@glowroom.co.uk"])
+        self.assertEqual(found["anyone@glowroom.co.uk"][0], mailbox.RISKY)
+
+    def test_stops_when_the_mail_port_is_blocked(self):
+        def blocked(host, port, timeout):
+            raise TimeoutError
+
+        checker = mailbox.Checker("me@saleane.com", "saleane.com", connect=blocked, pause=0)
+        for _ in range(2):
+            checker.check("glowroom.co.uk", ["mx1", "mx2"], ["a@glowroom.co.uk"])
+        self.assertTrue(checker.blocked)
+
+    def test_big_providers(self):
+        self.assertEqual(mailbox.provider("glowroom-co-uk.mail.protection.outlook.com"),
+                         "outlook.com")
+
+
+def _company(**values):
+    defaults = dict(company_number="01234567", website="https://glowroom.co.uk",
+                    contact_rule=rules.CAN_EMAIL)
+    defaults.update(values)
+    return places.blank(**defaults)
+
+
+class FinderTests(unittest.TestCase):
+    PEOPLE = {"01234567": [{"name": "Tom Brown", "role": "director"}],
+              "07654321": [{"name": "Amy Wu", "role": "director"}]}
+
+    def test_named_person_from_the_pattern_the_site_uses(self):
+        place = _company()
+        found = {"glowroom.co.uk": {"info@glowroom.co.uk": "https://glowroom.co.uk/contact",
+                                    "sarah.jones@glowroom.co.uk": "https://glowroom.co.uk/team"}}
+        finder.fill([place], found, self.PEOPLE)
+        self.assertEqual(place["email"], "info@glowroom.co.uk")
+        self.assertEqual(place["email_basis"], "published")
+        self.assertEqual(place["email_confidence"], 90)
+        self.assertEqual(place["email_pattern"], "first.last")
+        self.assertEqual(place["contact_name"], "Tom Brown")
+        self.assertEqual(place["contact_email"], "tom.brown@glowroom.co.uk")
+        self.assertEqual(place["contact_email_basis"], "pattern-shape")
+
+    def test_published_personal_address_is_used_as_it_is(self):
+        place = _company()
+        found = {"glowroom.co.uk": {"tom@glowroom.co.uk": "https://glowroom.co.uk/"}}
+        finder.fill([place], found, self.PEOPLE)
+        self.assertEqual(place["contact_email"], "tom@glowroom.co.uk")
+        self.assertEqual(place["contact_email_basis"], "published")
+
+    def test_post_only_rows_never_get_a_person(self):
+        place = _company(contact_rule=rules.POST_ONLY, contact_name="Tom Brown")
+        found = {"glowroom.co.uk": {"info@glowroom.co.uk": "https://glowroom.co.uk/"}}
+        finder.fill([place], found, self.PEOPLE, everyone=True)
+        self.assertEqual(place["email"], "info@glowroom.co.uk")
+        self.assertEqual((place["contact_name"], place["contact_email"]), ("", ""))
+
+    def test_borrowed_pattern_is_a_low_confidence_guess(self):
+        learned = _company()
+        unknown = _company(company_number="07654321", website="https://nailbar.co.uk")
+        found = {"glowroom.co.uk": {"tbrown@glowroom.co.uk": "https://glowroom.co.uk/"},
+                 "nailbar.co.uk": {}}
+        finder.fill([learned, unknown], found, self.PEOPLE)
+        self.assertEqual(learned["contact_email_basis"], "published")
+        self.assertEqual(unknown["contact_email"], "awu@nailbar.co.uk")
+        self.assertEqual(unknown["contact_email_basis"], "pattern-common")
+        self.assertLess(unknown["contact_email_confidence"], finder.READY)
+
+    def test_hunter_only_asked_when_the_site_gives_nothing(self):
+        asked = []
+
+        def lookup(site):
+            asked.append(site)
+            return {"pattern": "{first}.{last}", "emails": [
+                {"email": "hello@nailbar.co.uk", "type": "generic", "confidence": 80,
+                 "first": "", "last": ""}]}
+
+        rich = _company()
+        bare = _company(company_number="07654321", website="https://nailbar.co.uk")
+        found = {"glowroom.co.uk": {"tbrown@glowroom.co.uk": "https://glowroom.co.uk/"}}
+        finder.fill([rich, bare], found, self.PEOPLE, hunter=lookup)
+        self.assertEqual(asked, ["nailbar.co.uk"])
+        self.assertEqual(bare["email"], "hello@nailbar.co.uk")
+        self.assertEqual(bare["email_basis"], "hunter")
+        self.assertEqual(bare["contact_email"], "amy.wu@nailbar.co.uk")
+        self.assertEqual(bare["contact_email_basis"], "pattern-hunter")
+
+    def test_scores(self):
+        self.assertEqual(finder.score("published")[0], 90)
+        self.assertEqual(finder.score("published", "safe")[0], 98)
+        self.assertEqual(finder.score("pattern-common", "safe")[0], 90)
+        self.assertEqual(finder.score("pattern-matched", "", "no")[0], 0)
+        confidence, reason = finder.score("pattern-matched", "risky", "yes", "Tom Brown", "flast")
+        self.assertEqual(confidence, 60)
+        self.assertIn("Tom Brown", reason)
+
+    def test_one_off_lookup_ranks_the_learned_pattern_first(self):
+        crawl = lambda site: ({"j.smith@glowroom.co.uk": "https://glowroom.co.uk/",
+                               "info@glowroom.co.uk": "https://glowroom.co.uk/"}, "")
+        mx = lambda domain: (dns.YES, ["mx"])
+        ranked, shared = finder.lookup("https://www.glowroom.co.uk", "Sarah Jones", crawl, mx)
+        self.assertEqual(ranked[0][0], "s.jones@glowroom.co.uk")
+        self.assertEqual(shared, ["info@glowroom.co.uk"])
+
+
+class VerifyTests(unittest.TestCase):
+    def test_a_confirmed_other_pattern_replaces_a_guess(self):
+        place = _company(contact_name="Amy Wu", contact_email="amy@glowroom.co.uk",
+                         contact_email_basis="pattern-common", email_pattern="first")
+        real = {"amy.wu@glowroom.co.uk"}
+        ask = lambda domain, hosts, addresses: {
+            a: ("safe" if a in real else "invalid", "") for a in addresses}
+        verify.fill([place], mx=lambda d: (dns.YES, ["mx"]), ask=ask)
+        self.assertEqual(place["contact_email"], "amy.wu@glowroom.co.uk")
+        self.assertEqual(place["email_pattern"], "first.last")
+        self.assertEqual(place["contact_email_confidence"], 90)
+
+    def test_domain_without_mail_scores_nothing(self):
+        place = _company(email="info@glowroom.co.uk", email_basis="published",
+                         email_found_on="https://glowroom.co.uk/")
+        verify.fill([place], mx=lambda d: (dns.NO, []), ask=False)
+        self.assertEqual(place["email_check"], "no mail server")
+        self.assertEqual(place["email_confidence"], 0)
+        self.assertEqual(place["mail_server"], dns.NO)
 
 
 class PlacesFileTests(unittest.TestCase):

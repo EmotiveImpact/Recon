@@ -19,6 +19,12 @@ Calls are allowed unless the number is on the Corporate Telephone Preference Ser
 
 How Recon applies it: a business matched to Companies House as a company or LLP gets `can email`. Everything else, including any business we could not match, gets `post only`.
 
+**Named people.** Recon may put one person's name and address on a `can email` row, so an email can go to the owner rather than a shared inbox. To keep this fair under UK GDPR:
+- Only for companies and LLPs we may email. Never for `post only` rows, even with `--all-emails`, so a sole trader's personal address is never worked out.
+- The name is an active director (or LLP member) from Companies House, which is public by law. Secretaries, former directors and companies acting as directors are left out.
+- One person per business, nothing more about them than name, role and address.
+- A worked-out address is marked as such, with its confidence and the reason, and is never presented as published. Our first email must say where we got their details and how to opt out, and an opt-out goes on the suppression list.
+
 ## United States
 
 CAN-SPAM allows business email without consent, as long as each email has an honest sender and subject line, a working unsubscribe that is honoured within ten business days, and a real postal address. Recon marks every US business `can email`. Some states add rules for texts and calls; Recon does neither.

@@ -11,9 +11,10 @@ It uses free, open data only. Nothing is bought and nothing is scraped from Goog
 1. **Finds businesses** in [Overture Maps](https://overturemaps.org) (open data from Microsoft, Meta, Amazon and others) and [OpenStreetMap](https://www.openstreetmap.org), then joins duplicates.
 2. **Marks UK companies** using the free [Companies House](https://download.companieshouse.gov.uk/en_output.html) monthly file.
 3. **Applies the contact rules** for the country. In the UK, companies and LLPs may be emailed; sole traders and partnerships get post only. See [docs/RULES.md](docs/RULES.md).
-4. **Finds emails** on each business's own website, only for those we may email, politely and with a cache.
-5. **Checks emails** with [Reacher](https://github.com/reacherhq/check-if-email-exists) if you run it, otherwise only checks they look right.
-6. **Exports** `out/<target>-<date>.csv`, which opens in Excel or Google Sheets.
+4. **Names a person** at each company we may email: an active director from Companies House (needs a free API key).
+5. **Finds emails** on each business's own website, only for those we may email, politely and with a cache. It learns the pattern the business uses (sarah@, sarah.jones@ and so on) and works out the director's address from it.
+6. **Checks emails**: that the domain takes email, then whether the mailbox exists, using [Reacher](https://github.com/reacherhq/check-if-email-exists) or Recon's own check if either is switched on. Every address gets a confidence score from 0 to 100 and a sentence saying why.
+7. **Exports** `out/<target>-<date>.csv`, which opens in Excel or Google Sheets.
 
 ## Running it
 
@@ -29,10 +30,24 @@ Each step can be run on its own, repeated or resumed:
 python3 -m recon places    targets/saleane-uk.json
 python3 -m recon companies targets/saleane-uk.json --companies-house BasicCompanyData.zip
 python3 -m recon rules     targets/saleane-uk.json
+python3 -m recon people    targets/saleane-uk.json
 python3 -m recon emails    targets/saleane-uk.json
 python3 -m recon verify    targets/saleane-uk.json
 python3 -m recon export    targets/saleane-uk.json
 ```
+
+### The email finder
+
+- **Named directors** need a free Companies House API key: register at https://developer.company-information.service.gov.uk/, create a "REST" key, then `export RECON_COMPANIES_HOUSE_KEY=...`. Without it, everything else still works.
+- **Mailbox checks** need port 25 open, which most home and cloud connections block. Run the `verify` step on a small rented server with `--smtp-from you@yourdomain` (your real address, so mail servers know who is asking), or run Reacher there. Without either, `verify` still checks each domain takes email.
+- **Hunter** (optional, paid beyond a small free allowance): `export RECON_HUNTER_KEY=...` and add `--hunter` to the `emails` step. It is only asked about businesses whose own website gave nothing to go on.
+- **One person at one business**, like Hunter's email finder:
+
+```bash
+python3 -m recon find glowroom.co.uk --name "Sarah Jones"
+```
+
+This lists the likely addresses, best first, with a score and reason for each. In the UK, only email a person at a limited company or LLP.
 
 To find Overture's exact category names for a new kind of business:
 
@@ -53,7 +68,11 @@ Copy `targets/saleane-uk.json`, give it the project name and country, and list t
 | `website`, `phone` | From the map data; booking-platform and social links are left out |
 | `company_number`, `company_name`, `company_type` | Its Companies House record, when matched |
 | `contact_rule` | `can email`, `post only` or `check local rules` |
-| `email`, `email_found_on`, `email_check` | The published email, the page it was on, and the check result |
+| `email`, `email_found_on`, `email_check` | The business's main email, the page it was on, and the check result |
+| `email_confidence`, `email_reason`, `email_basis` | A score from 0 to 100 (70 or more is ready), why, and where the address came from |
+| `email_pattern`, `mail_server` | The pattern the business's addresses follow, and whether its domain takes email |
+| `contact_name`, `contact_role` | One director, for companies we may email |
+| `contact_email`, `contact_email_check`, `contact_email_confidence`, `contact_email_reason`, `contact_email_basis` | That person's address (published, or worked out from the pattern), its check, score and reason |
 | `source` | `overture`, `osm` or both |
 
 ## Credits

@@ -26,7 +26,16 @@ TIMEOUT = 12
 
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}")
 _LINK = re.compile(r"""<a\b[^>]*href\s*=\s*["']([^"'#]+)["'][^>]*>(.*?)</a>""", re.I | re.S)
-_CONTACTISH = re.compile(r"contact|about|get-in-touch|find-us|visit|book|enquir", re.I)
+_CONTACTISH = re.compile(r"contact|about|get-in-touch|find-us|visit|book|enquir|team|meet|staff",
+                         re.I)
+_CONTACT_FIRST = re.compile(r"contact|enquir|get-in-touch", re.I)
+_FALLBACK_PAGES = ("/contact", "/contact-us")
+# Addresses hidden from robots: Cloudflare's scrambled ones, and "info [at] x [dot] com".
+_CLOUDFLARE = re.compile(r"""(?:data-cfemail=["']|/cdn-cgi/l/email-protection#)([0-9a-fA-F]{6,})""")
+_SPELT_OUT = re.compile(
+    r"([A-Za-z0-9._%+-]+)\s*[\[({]\s*at\s*[\])}]\s*"
+    r"([A-Za-z0-9-]+(?:\s*(?:[\[({]\s*dot\s*[\])}]|\.)\s*[A-Za-z0-9-]+)+)", re.I)
+_SPELT_DOT = re.compile(r"\s*(?:[\[({]\s*dot\s*[\])}]|\.)\s*", re.I)
 _JUNK_DOMAINS = (
     "example.com", "domain.com", "email.com", "yourdomain", "sentry.io", "wixpress.com",
     "sentry-next.wixpress.com", "godaddy.com", "squarespace.com", "wordpress.com",
@@ -57,9 +66,29 @@ def _robots(base):
     return parser
 
 
+def cloudflare(scrambled):
+    """Unscramble an address hidden by Cloudflare's email protection."""
+    data = bytes.fromhex(scrambled)
+    return bytes(b ^ data[0] for b in data[1:]).decode("utf-8", "replace")
+
+
+def _unhide(page):
+    """Extra text holding the addresses a page hides from robots."""
+    found = []
+    for scrambled in _CLOUDFLARE.findall(page):
+        try:
+            found.append(cloudflare(scrambled))
+        except ValueError:
+            continue
+    for local, rest in _SPELT_OUT.findall(page):
+        found.append(local + "@" + _SPELT_DOT.sub(".", rest))
+    return " ".join(found)
+
+
 def clean_candidates(page):
     """Every plausible email on a page, in the order it appears."""
     page = html.unescape(page)
+    page = page + " " + _unhide(page)
     found = []
     for raw in _EMAIL.findall(page.replace("%40", "@")):
         email = raw.strip(".").lower()
@@ -99,38 +128,52 @@ def contact_links(page, base):
         if _CONTACTISH.search(href) or _CONTACTISH.search(re.sub("<[^>]+>", "", label)):
             if url not in links:
                 links.append(url)
+    # Contact pages first, then about and team pages.
+    links.sort(key=lambda url: 0 if _CONTACT_FIRST.search(url) else 1)
     return links[:MAX_EXTRA_PAGES]
+
+
+def crawl(website):
+    """Every address on a business's own site: ({email: page it was on}, note).
+
+    Reads the homepage, then up to three same-site pages that look like
+    contact, about or team pages (or /contact when none is linked).
+    """
+    if not text.own_website(website):
+        return {}, "not the business's own site"
+    start = website if "://" in website else "https://" + website
+    found_on = {}
+    try:
+        robots = _robots(start)
+        if not robots.can_fetch(USER_AGENT, start):
+            return {}, "site asks robots not to visit"
+        page, final_url = _fetch(start)
+        for email in clean_candidates(page):
+            found_on.setdefault(email, final_url)
+        links = contact_links(page, final_url) or [
+            urllib.parse.urljoin(final_url, path) for path in _FALLBACK_PAGES]
+        for link in links[:MAX_EXTRA_PAGES]:
+            if not robots.can_fetch(USER_AGENT, link):
+                continue
+            time.sleep(1)  # One page a second per site.
+            try:
+                more, _ = _fetch(link)
+            except urllib.error.HTTPError:
+                continue  # A missing page is no reason to give up on the site.
+            for email in clean_candidates(more):
+                found_on.setdefault(email, link)
+        return found_on, "" if found_on else "no email on the site"
+    except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError) as error:
+        return found_on, f"could not open site ({type(error).__name__})"
+    except Exception as error:  # A broken site must never stop the whole run.
+        return found_on, f"could not read site ({type(error).__name__})"
 
 
 def find_email(website):
     """Return (email, page_it_was_found_on) for one website, or ('', reason)."""
-    if not text.own_website(website):
-        return "", "not the business's own site"
-    start = website if "://" in website else "https://" + website
-    try:
-        robots = _robots(start)
-        if not robots.can_fetch(USER_AGENT, start):
-            return "", "site asks robots not to visit"
-        page, final_url = _fetch(start)
-        site = text.domain(final_url)
-        candidates = clean_candidates(page)
-        found_on = {e: final_url for e in candidates}
-        if not any(e.endswith("@" + site) for e in candidates):
-            for link in contact_links(page, final_url):
-                if not robots.can_fetch(USER_AGENT, link):
-                    continue
-                time.sleep(1)  # One page a second per site.
-                more, _ = _fetch(link)
-                for email in clean_candidates(more):
-                    if email not in found_on:
-                        candidates.append(email)
-                        found_on[email] = link
-        email = best_email(candidates, site)
-        return (email, found_on[email]) if email else ("", "no email on the site")
-    except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError) as error:
-        return "", f"could not open site ({type(error).__name__})"
-    except Exception as error:  # A broken site must never stop the whole run.
-        return "", f"could not read site ({type(error).__name__})"
+    found_on, note = crawl(website)
+    email = best_email(list(found_on), text.domain(website))
+    return (email, found_on[email]) if email else ("", note)
 
 
 def _load_cache(path):
@@ -140,14 +183,30 @@ def _load_cache(path):
             for line in handle:
                 try:
                     row = json.loads(line)
+                    if "candidates" not in row:  # Written before all addresses were kept.
+                        row["candidates"] = {row["email"]: row["found_on"]} if row["email"] else {}
                     cache[row["domain"]] = row
                 except (json.JSONDecodeError, KeyError):
                     continue  # Skip a half-written last line.
     return cache
 
 
+def load(cache_path):
+    """Every address found so far, by site: {domain: {email: page}}."""
+    return {site: row["candidates"] for site, row in _load_cache(cache_path).items()}
+
+
+def _use(place, row):
+    """Put a site's best published address on a place that has none yet."""
+    if place["email"]:
+        return
+    email = best_email(list(row["candidates"]), row["domain"])
+    place["email"] = email
+    place["email_found_on"] = row["candidates"][email] if email else row["found_on"]
+
+
 def fill(places, cache_path, everyone=False, workers=8):
-    """Look up emails for places with their own website.
+    """Read the own websites of places we may email, keeping every address found.
 
     By default only places we may email are looked up: collecting addresses
     we cannot lawfully use is pointless and goes against data minimisation.
@@ -155,14 +214,13 @@ def fill(places, cache_path, everyone=False, workers=8):
     cache = _load_cache(cache_path)
     todo = {}
     for place in places:
-        if place["email"] or not place["website"]:
+        if not text.own_website(place["website"]):
             continue
         if not everyone and place["contact_rule"] != "can email":
             continue
         site = text.domain(place["website"])
         if site in cache:
-            place["email"] = cache[site]["email"]
-            place["email_found_on"] = cache[site]["found_on"]
+            _use(place, cache[site])
         else:
             todo.setdefault(site, []).append(place)
 
@@ -171,19 +229,21 @@ def fill(places, cache_path, everyone=False, workers=8):
     done = 0
     with open(cache_path, "a", encoding="utf-8") as log, \
             ThreadPoolExecutor(max_workers=workers) as pool:
-        jobs = {pool.submit(find_email, group[0]["website"]): site
+        jobs = {pool.submit(crawl, group[0]["website"]): site
                 for site, group in todo.items()}
         for job in as_completed(jobs):
             site = jobs[job]
-            email, found_on = job.result()
-            log.write(json.dumps({
-                "domain": site, "email": email, "found_on": found_on,
+            found_on, note = job.result()
+            email = best_email(list(found_on), site)
+            row = {
+                "domain": site, "email": email,
+                "found_on": found_on[email] if email else note, "candidates": found_on,
                 "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            }) + "\n")
+            }
+            log.write(json.dumps(row) + "\n")
             log.flush()
             for place in todo[site]:
-                place["email"] = email
-                place["email_found_on"] = found_on
+                _use(place, row)
             done += 1
             if done % 100 == 0:
                 print(f"  {done} of {len(todo)} websites visited")

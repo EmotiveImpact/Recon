@@ -11,5 +11,8 @@ In rough order. Tick items off here as they land.
 7. **Scoring**: rank businesses by fit (for example, has its own website, several staff, in a city we focus on).
 8. **Sending**, kept separate from finding: a sender on its own domain, unsubscribe handling, the suppression list, and a record of what was sent to whom.
 9. **Phone screening** against the TPS and CTPS before any calling.
+10. ~~**Email finder**~~: done 13 October 2026. Patterns, named directors, mail record and mailbox checks, confidence scores, `recon find`, optional Hunter.
+11. **Mailbox checks from a small server**: rent one with port 25 open, run `recon verify --smtp-from` there, and record how many guesses are confirmed.
+12. **Names from the business's own site** (a "meet the team" page or its structured data) for companies whose directors don't match, and for US businesses, which have no Companies House.
 
 Things decided against, so they are not reopened without a reason: scraping Google Maps, booking platforms or professional registers; buying lists; selling Recon as a product before it has proved itself on SALEANE.
