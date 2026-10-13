@@ -128,12 +128,12 @@ function Details({ row, group, onClose }: { row: Row; group: string; onClose: ()
   );
 }
 
-export default function Find() {
+export default function Find({ initial }: { initial?: URLSearchParams }) {
   const [status, setStatus] = useState<MasterStatus | null>(null);
-  const [group, setGroup] = useState("uk");
-  const [area, setArea] = useState("");
-  const [typed, setTyped] = useState("plumbers");
-  const [q, setQ] = useState("plumbers");
+  const [group, setGroup] = useState(initial?.get("group") || "uk");
+  const [area, setArea] = useState(initial?.get("area") || "");
+  const [typed, setTyped] = useState(initial?.get("q") ?? "plumbers");
+  const [q, setQ] = useState(initial?.get("q") ?? "plumbers");
   const [rule, setRule] = useState("");
   const [has, setHas] = useState<string[]>([]);
   const [kind, setKind] = useState("");
@@ -150,7 +150,6 @@ export default function Find() {
     api.master().then(setStatus, (e) => setError(e.message));
   }, []);
   useEffect(() => {
-    setArea("");
     setKind("");
     if (status?.available) api.masterKinds(group).then(setKinds, () => setKinds([]));
   }, [group, status?.available]);
@@ -216,7 +215,7 @@ export default function Find() {
             <Search size={20} />
             <input className="input" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="What kind of business? For example plumbers, or dental, dentist" />
           </div>
-          <select className="input select" value={group} onChange={(e) => setGroup(e.target.value)}>
+          <select className="input select" value={group} onChange={(e) => { setGroup(e.target.value); setArea(""); }}>
             {COUNTRIES.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
           </select>
           <select className="input select" value={area} onChange={(e) => setArea(e.target.value)}>

@@ -1,5 +1,6 @@
 """Offline tests for the website's server (recon/server.py)."""
 
+import csv
 import importlib.util
 import json
 import os
@@ -12,7 +13,7 @@ import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
 
-from recon import directory, places, server
+from recon import dashboard, directory, places, server
 
 HERE = os.path.dirname(__file__)
 
@@ -221,3 +222,57 @@ class DirectoryTests(unittest.TestCase):
         self.assertEqual(found["by_area"], [{"area": "england", "count": 2}])
         with self.assertRaises(ValueError):
             directory.Directory(folder).files("uk", "../secrets")
+
+
+class DashboardTests(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.folder, "uk"))
+        os.makedirs(os.path.join(self.folder, "trades"))
+        with open(os.path.join(self.folder, "uk", "counts.csv"), "w", encoding="utf-8") as handle:
+            handle.write("area,organisations,with_email,may_email,with_phone,with_website\n"
+                         "england,100,40,10,60,50\nwales,20,5,1,9,8\n")
+        with open(os.path.join(self.folder, "trades", "summary.csv"), "w", encoding="utf-8") as handle:
+            handle.write("trade,businesses,with email,may email\nbuilders,3,2,1\ntotal,3,2,1\n")
+        rows = [
+            # name, postcode, town, lat, lon, email, rule, turnover band
+            ("Brighton Build", "BN1 1AA", "Brighton", "50.8225", "-0.1372", "a@b.co.uk", "can email", "yes", "small"),
+            ("Hove Homes", "BN3 2AB", "Hove", "50.8279", "-0.1680", "", "post only", "", "micro"),
+            ("Worthing Works", "BN11 1AA", "Worthing", "50.8179", "-0.3729", "c@d.co.uk", "post only", "", ""),
+        ]
+        with open(os.path.join(self.folder, "trades", "builders.csv"), "w", newline="",
+                  encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["name", "postcode", "town", "lat", "lon", "email", "contact_rule",
+                             "publishes_turnover", "size_band"])
+            writer.writerows(rows)
+        self.dash = dashboard.Dashboard(self.folder)
+
+    def test_overview_adds_up_the_counts(self):
+        view = self.dash.overview()
+        self.assertEqual(view["countries"]["uk"]["totals"]["organisations"], 120)
+        self.assertEqual([t["trade"] for t in view["trades"]], ["builders"])
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_postcode_district_does_not_catch_its_longer_neighbours(self):
+        found = self.dash.places({"near": ["BN1"], "km": ["2"]})
+        self.assertEqual(found["centre"]["matched"], "BN1")
+        self.assertEqual(found["total"], 1)  # Hove is 2.2 km away; Worthing much further
+        self.assertEqual(self.dash.places({"near": ["BN1"], "km": ["5"]})["total"], 2)
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_towns_filters_and_money(self):
+        found = self.dash.places({"near": ["Worthing"], "km": ["50"], "has": ["email"]})
+        self.assertEqual(found["total"], 2)
+        self.assertEqual(found["points"][0]["name"], "Worthing Works")
+        money = self.dash.overview()["money"]
+        self.assertEqual((money["total"], money["publishes_turnover"]), (3, 1))
+        only = self.dash.places({"has": ["money"]})
+        self.assertEqual([p["name"] for p in only["points"]], ["Brighton Build"])
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_unknown_places_and_trades_are_refused(self):
+        with self.assertRaises(LookupError):
+            self.dash.places({"near": ["Nowhere-on-sea"]})
+        with self.assertRaises(ValueError):
+            self.dash.places({"trade": ["../etc"]})

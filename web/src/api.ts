@@ -95,6 +95,45 @@ export type MasterResults = {
   rows: Row[];
 };
 
+export type AreaCounts = { area: string; organisations: number; with_email: number; may_email: number; with_phone: number; with_website: number };
+export type CountryCounts = { totals: Partial<Omit<AreaCounts, "area">>; areas: AreaCounts[] };
+export type Money = {
+  available: boolean;
+  total?: number;
+  registered?: number;
+  publishes_turnover?: number;
+  size_bands?: { band: string; count: number }[];
+  account_types?: { type: string; count: number }[];
+};
+export type TradeSummary = Record<string, number> & { trade: string };
+
+export type Overview = {
+  available: boolean;
+  countries?: Record<string, CountryCounts>;
+  sources?: { name: string; title: string; country: string; licence: string; url: string; records: number; with_email: number }[];
+  trades?: TradeSummary[];
+  money?: Money;
+};
+
+export type Place = Record<string, string> & { lat: number; lon: number; km?: number };
+
+export type MapResults = {
+  available: boolean;
+  centre: { lat: number; lon: number; label: string; matched: string } | null;
+  km: number;
+  total: number;
+  with_email: number;
+  may_email: number;
+  with_phone: number;
+  with_mobile: number;
+  with_website: number;
+  by_trade: { trade: string; name: string; count: number }[];
+  trades: { trade: string; name: string }[];
+  money: Money;
+  shown: number;
+  points: Place[];
+};
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const response = await fetch("/api/" + path, {
     method,
@@ -128,6 +167,9 @@ export const api = {
   masterSearch: (query: URLSearchParams) => call<MasterResults>("GET", `master/search?${query}`),
   masterKinds: (group: string) => call<{ kind: string; count: number }[]>("GET", `master/kinds?group=${group}`),
   masterExportUrl: (query: URLSearchParams) => `/api/master/export?${query}`,
+  overview: () => call<Overview>("GET", "overview"),
+  map: (query: URLSearchParams) => call<MapResults>("GET", `map?${query}`),
+  mapExportUrl: (query: URLSearchParams) => `/api/map/export?${query}`,
   categories: (country: string, words: string[]) =>
     call<{ category: string; places: number }[]>("POST", "categories", { country, words }),
 };

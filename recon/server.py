@@ -28,7 +28,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import directory, finder, places
+from . import dashboard, directory, finder, places
 from .target import COUNTRY_BOX, Target
 
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
@@ -47,6 +47,7 @@ class Workspace:
     def __init__(self, root, master=None):
         self.root = os.path.abspath(root)
         self.directory = directory.Directory(master or directory.default_folder(self.root))
+        self.dashboard = dashboard.Dashboard(self.directory.folder)
         self.projects_dir = os.path.join(self.root, "projects")
         self.targets_dir = os.path.join(self.root, "targets")
         self._results = {}  # path -> (mtime, rows)
@@ -531,6 +532,12 @@ def handler_for(workspace, site):
                 return self._json(workspace.directory.kinds(one(query, "group", "uk")))
             if route == ("GET", "master", "export"):
                 return self._file(workspace.directory.export(query))
+            if route == ("GET", "overview"):
+                return self._json(workspace.dashboard.overview())
+            if route == ("GET", "map"):
+                return self._json(workspace.dashboard.places(query))
+            if route == ("GET", "map", "export"):
+                return self._file(workspace.dashboard.export(query))
             if route == ("GET", "runs"):
                 return self._json(workspace.runs.list())
             if route == ("POST", "runs"):

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FolderKanban, History, Plus, Search } from "lucide-react";
+import { FolderKanban, History, LayoutDashboard, Map as MapIcon, Plus, Search } from "lucide-react";
 import { api, type Project } from "./api";
 import { Toaster, useRoute } from "./ui";
 import Projects from "./pages/Projects";
@@ -8,6 +8,8 @@ import TargetEditor from "./pages/TargetEditor";
 import Results from "./pages/Results";
 import Runs from "./pages/Runs";
 import Find from "./pages/Find";
+import Dashboard from "./pages/Dashboard";
+import MapView from "./pages/MapView";
 
 const COLOURS = ["#7c5cff", "#22d3ee", "#34d399", "#f472b6", "#fbbf24", "#60a5fa"];
 export const colourFor = (i: number) => COLOURS[i % COLOURS.length];
@@ -30,7 +32,9 @@ export default function App() {
   else if (section === "t" && id) page = <Results slug={id} projects={projects} />;
   else if (section === "runs") page = <Runs />;
   else if (section === "projects") page = <Projects projects={projects} refresh={refresh} />;
-  else page = <Find />;
+  else if (section === "find") page = <Find key={query.toString()} initial={query} />;
+  else if (section === "map") page = <MapView initial={query} />;
+  else page = <Dashboard />;
 
   const current = section === "p" ? id : section === "t" ? projects.find((p) => p.targets.some((t) => t.slug === id))?.slug : "";
   return (
@@ -45,6 +49,12 @@ export default function App() {
         </a>
         <nav className="nav">
           <a href="#/" className={!section ? "on" : ""}>
+            <LayoutDashboard size={17} /> Dashboard
+          </a>
+          <a href="#/map" className={section === "map" ? "on" : ""}>
+            <MapIcon size={17} /> Map
+          </a>
+          <a href="#/find" className={section === "find" ? "on" : ""}>
             <Search size={17} /> Find businesses
           </a>
           <a href="#/projects" className={section === "projects" ? "on" : ""}>
@@ -69,7 +79,7 @@ export default function App() {
           Overture Maps · OpenStreetMap · Companies House · 60 more open registers
         </div>
       </aside>
-      <main className="main">
+      <main className={section === "map" ? "main flush" : "main"}>
         {error && <div className="notice bad" style={{ marginBottom: 20 }}>{error}</div>}
         {page}
       </main>
