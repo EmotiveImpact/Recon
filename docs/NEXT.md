@@ -15,4 +15,7 @@ In rough order. Tick items off here as they land.
 11. **Mailbox checks from a small server**: rent one with port 25 open, run `recon verify --smtp-from` there, and record how many guesses are confirmed.
 12. **Names from the business's own site** (a "meet the team" page or its structured data) for companies whose directors don't match, and for US businesses, which have no Companies House.
 
+13. ~~**Website**~~: done 13 October 2026. Projects, target list editor with ready-made business types, runs and a results browser (`python3 -m recon.server`). Searching near a postcode or town with a map added the same day.
+14. **Fix the SALEANE category names** Overture renamed in 2026-09-23.1 (`spas` is now `spa`, `chiropractor` is now `chiropractic`, and so on). The target list editor marks each one.
+
 Things decided against, so they are not reopened without a reason: scraping Google Maps, booking platforms or professional registers; buying lists; selling Recon as a product before it has proved itself on SALEANE.

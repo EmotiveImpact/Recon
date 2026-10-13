@@ -17,6 +17,19 @@ It uses free, open data only. Nothing is bought and nothing is scraped from Goog
 7. **Checks emails**: that the domain takes email, then whether the mailbox exists, using [Reacher](https://github.com/reacherhq/check-if-email-exists) or Recon's own check if either is switched on. Every address gets a confidence score from 0 to 100 and a sentence saying why.
 8. **Exports** `out/<target>-<date>.csv`, which opens in Excel or Google Sheets.
 
+## The website
+
+Recon has a website. Its front page, **Find businesses**, searches the master database (every open register in one place, built with `python3 -m recon.master`): type a trade such as plumbers, pick the UK, the US or elsewhere and an area, and filter to those you may email or that list an email, phone or website. Each row shows which registers it came from, and the whole result downloads as a spreadsheet. In the UK and the US you can also give a postcode, ZIP code or town and a distance ("plumbers within 5 miles of Cardiff"): the list is sorted nearest first, shows how far away each one is, and every match is pinned on a map, where clicking a pin shows its phone, email, website and whether you may email it. Positions come from GeoNames' free postcode file, downloaded once to `data/geo/`; the map is OpenStreetMap. The site finds the database in `data/master-db/`, in `RECON_MASTER`, or with `--master <folder>`.
+
+It also has everything below: projects (SALEANE first), target lists you can build by picking kinds of business, a Run button, and a results table you can filter and export.
+
+```bash
+cd web && npm install && npm run build && cd ..   # once, and after changes to web/
+python3 -m recon.server                           # then open http://localhost:8765
+```
+
+The server only listens on the computer it runs on, because the results hold contact details. Never put it on the open internet. Runs started from the site are the same command line steps below, logged in `data/<target>/runs/`. To work on the site itself, run `npm run dev` in `web/` alongside the server.
+
 ## Running it
 
 ```bash
@@ -58,7 +71,7 @@ python3 -m recon categories targets/saleane-uk.json --words groom yoga pilates
 
 ## Adding a project
 
-Copy `targets/saleane-uk.json`, give it the project name and country, and list the sectors with their Overture categories, OpenStreetMap tags and (UK only) Companies House trade codes. Nothing else changes.
+In the website: New project, then New target list, and pick kinds of business from Quick add. By hand: add `projects/<name>.json` with a name and description, copy `targets/saleane-uk.json`, give it the project name and country, and list the sectors with their Overture categories, OpenStreetMap tags and (UK only) Companies House trade codes. Nothing else changes.
 
 ## The spreadsheet
 
