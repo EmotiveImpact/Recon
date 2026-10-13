@@ -253,6 +253,25 @@ class Directory:
         params = [lat - rise, lat + rise, lon - reach, lon + reach, lat, lat, lon, miles]
         return sql, params, {"lat": lat, "lon": lon, "miles": miles, "label": label}
 
+    def _within(self, group, files, circle):
+        """Only the area files (nations or states) the circle touches, plus
+        "unknown", so a search near Austin doesn't read every state."""
+        table = self.postcodes(group)
+        rise = circle["miles"] / 69.0
+        reach = circle["miles"] / max(69.0 * math.cos(math.radians(circle["lat"])), 1)
+        with self.lock:
+            rows = self.db().execute(
+                f"""SELECT DISTINCT state, state_code FROM {table}
+                    WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?""",
+                [circle["lat"] - rise, circle["lat"] + rise,
+                 circle["lon"] - reach, circle["lon"] + reach]).fetchall()
+        names = {"unknown"}
+        for state, code in rows:
+            names.add(re.sub(r"[^a-z0-9]+", "-", (state or "").lower()).strip("-"))
+            names.add((code or "").lower())
+        kept = [f for f in files if os.path.splitext(os.path.basename(f))[0] in names]
+        return kept or files
+
     # Searching --------------------------------------------------------------
 
 
@@ -320,6 +339,8 @@ class Directory:
         group = one(query, "group", "uk")
         files = self.files(group, one(query, "area"))
         where, params, circle = self._where(query, group)
+        if circle and not one(query, "area"):
+            files = self._within(group, files, circle)
         page = max(int(one(query, "page", "1") or 1), 1)
         size = min(max(int(one(query, "size", "50") or 50), 1), 200)
         groups = terms(one(query, "q"))
@@ -384,6 +405,8 @@ class Directory:
         group = one(query, "group", "uk")
         files = self.files(group, one(query, "area"))
         where, params, circle = self._where(query, group)
+        if circle and not one(query, "area"):
+            files = self._within(group, files, circle)
         inner = f"""SELECT {', '.join(COLUMNS)},
                            regexp_extract(filename, '([^/\\\\]+)\\.parquet$', 1) AS area
                     FROM {SOURCE}{where}"""

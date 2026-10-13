@@ -295,14 +295,14 @@ class DashboardTests(unittest.TestCase):
 
     @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
     def test_postcode_district_does_not_catch_its_longer_neighbours(self):
-        found = self.dash.places({"near": ["BN1"], "km": ["2"]})
+        found = self.dash.places({"near": ["BN1"], "miles": ["1"]})
         self.assertEqual(found["centre"]["matched"], "BN1")
-        self.assertEqual(found["total"], 1)  # Hove is 2.2 km away; Worthing much further
-        self.assertEqual(self.dash.places({"near": ["BN1"], "km": ["5"]})["total"], 2)
+        self.assertEqual(found["total"], 1)  # Hove is 1.4 miles away; Worthing much further
+        self.assertEqual(self.dash.places({"near": ["BN1"], "miles": ["3"]})["total"], 2)
 
     @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
     def test_towns_filters_and_money(self):
-        found = self.dash.places({"near": ["Worthing"], "km": ["50"], "has": ["email"]})
+        found = self.dash.places({"near": ["Worthing"], "miles": ["30"], "has": ["email"]})
         self.assertEqual(found["total"], 2)
         self.assertEqual(found["points"][0]["name"], "Worthing Works")
         money = self.dash.overview()["money"]
@@ -316,6 +316,12 @@ class DashboardTests(unittest.TestCase):
             self.dash.places({"near": ["Nowhere-on-sea"]})
         with self.assertRaises(ValueError):
             self.dash.places({"trade": ["../etc"]})
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_places_the_lists_dont_know_are_asked_elsewhere(self):
+        dash = dashboard.Dashboard(self.folder, locate=lambda place: (50.8225, -0.1372, "Kemptown"))
+        found = dash.places({"near": ["Kemptown"], "miles": ["1"]})
+        self.assertEqual((found["centre"]["label"], found["total"]), ("Kemptown", 1))
 
 
 if __name__ == "__main__":

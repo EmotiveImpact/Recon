@@ -48,7 +48,8 @@ class Workspace:
         self.root = os.path.abspath(root)
         self.directory = directory.Directory(master or directory.default_folder(self.root),
                                              geo=os.path.join(self.root, "data", "geo"))
-        self.dashboard = dashboard.Dashboard(self.directory.folder)
+        self.dashboard = dashboard.Dashboard(
+            self.directory.folder, locate=lambda place: self.directory.locate("uk", place))
         self.projects_dir = os.path.join(self.root, "projects")
         self.targets_dir = os.path.join(self.root, "targets")
         self._results = {}  # path -> (mtime, rows)
@@ -629,6 +630,8 @@ def main(argv=None):
                                          "found by itself in data/master-db or RECON_MASTER")
     args = parser.parse_args(argv)
     workspace = Workspace(args.root, args.master)
+    # Read the trade lists now, so the dashboard's first visit is quick.
+    threading.Thread(target=workspace.dashboard.warm, daemon=True).start()
     site = os.path.join(workspace.root, "web", "dist")
     server = ThreadingHTTPServer((args.host, args.port), handler_for(workspace, site))
     print(f"Recon is open at http://{'localhost' if args.host == '127.0.0.1' else args.host}:"

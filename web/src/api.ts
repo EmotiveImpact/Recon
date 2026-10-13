@@ -122,12 +122,12 @@ export type Overview = {
   money?: Money;
 };
 
-export type Place = Record<string, string> & { lat: number; lon: number; km?: number };
+export type Place = Record<string, string> & { lat: number; lon: number; miles?: number };
 
 export type MapResults = {
   available: boolean;
   centre: { lat: number; lon: number; label: string; matched: string } | null;
-  km: number;
+  miles: number;
   total: number;
   with_email: number;
   may_email: number;

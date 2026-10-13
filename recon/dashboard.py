@@ -61,8 +61,11 @@ def trade_name(slug):
 
 
 class Dashboard:
-    def __init__(self, folder):
+    def __init__(self, folder, locate=None):
         self.folder = folder
+        # A second way to find a place (the website passes GeoNames' postcode
+        # centres), tried when the trade lists themselves don't know it.
+        self.fallback = locate
         self.lock = threading.Lock()
         self._db = None
         self._loaded = None  # the trade files and their times, when loaded
@@ -84,6 +87,12 @@ class Dashboard:
             if os.path.exists(plumbers):
                 found.setdefault("plumbers", plumbers)
         return found
+
+    def warm(self):
+        try:
+            self.money()
+        except Exception:  # Only a head start: any problem shows on first use.
+            pass
 
     def db(self):
         if self._db is None:
@@ -213,6 +222,12 @@ class Dashboard:
                              [text, f"%, {text}%"]).fetchone()
         if n:
             return {"lat": y, "lon": x, "label": text.title(), "matched": text}
+        if self.fallback:
+            try:
+                y, x, label = self.fallback(text)
+                return {"lat": y, "lon": x, "label": label, "matched": text}
+            except (LookupError, ValueError):
+                pass
         return None
 
     def _where(self, query, centre, radius):
@@ -225,9 +240,9 @@ class Dashboard:
             clauses.append("trade IN (" + ", ".join("?" for _ in trades) + ")")
             params += trades
         if centre:
-            # A box first (quick), then the real distance in kilometres.
-            dy = radius / 111.0
-            dx = radius / (111.0 * max(math.cos(math.radians(centre["lat"])), 0.1))
+            # A box first (quick), then the real distance in miles.
+            dy = radius / 69.0
+            dx = radius / (69.0 * max(math.cos(math.radians(centre["lat"])), 0.1))
             clauses.append("y BETWEEN ? AND ? AND x BETWEEN ? AND ?")
             params += [centre["lat"] - dy, centre["lat"] + dy, centre["lon"] - dx, centre["lon"] + dx]
             clauses.append(f"{distance(centre)} <= ?")
@@ -260,7 +275,7 @@ class Dashboard:
         return " WHERE " + " AND ".join(clauses), params
 
     def places(self, query):
-        radius = min(max(float(one(query, "km", "5") or 5), 0.2), 100)
+        radius = miles(query)
         with self.lock:
             self._load()
             if not self._loaded:
@@ -299,8 +314,8 @@ class Dashboard:
                 if value is None:
                     point[key] = ""
             if centre:
-                point["km"] = round(haversine(centre, point), 2)
-        return {"available": True, "centre": centre, "km": radius, "total": total,
+                point["miles"] = round(haversine(centre, point), 2)
+        return {"available": True, "centre": centre, "miles": radius, "total": total,
                 "with_email": with_email, "may_email": may, "with_phone": with_phone,
                 "with_mobile": with_mobile, "with_website": with_site,
                 "by_trade": [{"trade": t, "name": trade_name(t), "count": n} for t, n in by_trade],
@@ -326,7 +341,7 @@ class Dashboard:
 
     def export(self, query):
         """Every business in the chosen area as a CSV file (a temporary path)."""
-        radius = min(max(float(one(query, "km", "5") or 5), 0.2), 100)
+        radius = miles(query)
         with self.lock:
             self._load()
             place = one(query, "near")
@@ -336,7 +351,7 @@ class Dashboard:
             where, params = self._where(query, centre, radius)
             handle, path = tempfile.mkstemp(suffix=".csv")
             os.close(handle)
-            extra = f", round({distance(centre)}, 2) AS km_away" if centre else ""
+            extra = f", round({distance(centre)}, 2) AS miles_away" if centre else ""
             order = f"{distance(centre)}," if centre else ""
             self.db().execute(
                 f"""COPY (SELECT * EXCLUDE (y, x, pc, outward){extra} FROM places{where}
@@ -345,14 +360,21 @@ class Dashboard:
         return path
 
 
+def miles(query):
+    try:
+        return min(max(float(one(query, "miles", "5") or 5), 0.2), 100)
+    except ValueError:
+        raise ValueError("Choose a distance in miles") from None
+
+
 def distance(centre):
-    """SQL for the distance in kilometres from the centre to each row."""
+    """SQL for the distance in miles from the centre to each row."""
     lat, lon = float(centre["lat"]), float(centre["lon"])
-    return (f"(6371 * 2 * asin(sqrt(pow(sin(radians(y - {lat}) / 2), 2) + "
+    return (f"(3958.8 * 2 * asin(sqrt(pow(sin(radians(y - {lat}) / 2), 2) + "
             f"cos(radians({lat})) * cos(radians(y)) * pow(sin(radians(x - {lon}) / 2), 2))))")
 
 
 def haversine(a, b):
     lat1, lon1, lat2, lon2 = map(math.radians, (a["lat"], a["lon"], b["lat"], b["lon"]))
     h = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
-    return 6371 * 2 * math.asin(math.sqrt(h))
+    return 3958.8 * 2 * math.asin(math.sqrt(h))
