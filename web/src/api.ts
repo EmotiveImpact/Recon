@@ -102,6 +102,8 @@ export type Money = {
   total?: number;
   registered?: number;
   publishes_turnover?: number;
+  with_net_assets?: number;
+  with_staff?: number;
   size_bands?: { band: string; count: number }[];
   account_types?: { type: string; count: number }[];
 };

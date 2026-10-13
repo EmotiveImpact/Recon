@@ -193,7 +193,7 @@ export default function Dashboard() {
             <button className="btn small" onClick={() => go("/map")}><MapIcon size={14} /> Open the map</button>
           </div>
           <div className="trade-table">
-            <div className="trade-row head"><span>Trade</span><span>Businesses</span><span>Email</span><span>May email</span><span /></div>
+            <div className="trade-row head"><span>Trade</span><span>Businesses</span><span>Email</span><span>May email</span><span>Companies</span><span /></div>
             {trades.map((t) => (
               <button key={t.trade} className="trade-row" onClick={() => go(`/map?trade=${t.trade}`)}>
                 <span className="name">{tradeName(t.trade)}</span>
@@ -203,6 +203,7 @@ export default function Dashboard() {
                 </span>
                 <span>{pct(t["with email"], t.businesses)}</span>
                 <span className="green-text">{fmt(t["may email and has email"] ?? t["may email"])}</span>
+                <span>{t["registered companies"] !== undefined ? fmt(t["registered companies"]) : "-"}</span>
                 <ArrowRight size={14} className="faint" />
               </button>
             ))}
@@ -213,25 +214,33 @@ export default function Dashboard() {
           <div className="panel-head">
             <div>
               <h3><PoundSterling size={15} style={{ verticalAlign: -2 }} /> Who publishes their money</h3>
-              <p className="small muted">From the accounts each company files at Companies House.</p>
+              <p className="small muted">From the accounts each trade company files at Companies House.</p>
             </div>
           </div>
-          {money?.available ? (
+          {money?.available && money.registered ? (
             <>
               <div className="donut-wrap">
-                <Donut part={money.publishes_turnover ?? 0} whole={money.total ?? 0} />
+                <Donut part={money.with_net_assets ?? 0} whole={money.registered} />
                 <div>
-                  <b className="big-num">{fmt(money.publishes_turnover)}</b>
-                  <div className="small muted">of {fmt(money.total)} trade businesses publish their turnover</div>
+                  <b className="big-num">{fmt(money.with_net_assets)}</b>
+                  <div className="small muted">of {fmt(money.registered)} registered companies show what they're worth</div>
                 </div>
               </div>
-              <div className="section-title" style={{ marginTop: 6 }}>By size</div>
-              <Bars rows={(money.size_bands ?? []).map((b) => ({ key: b.band, label: b.band, total: b.count, part: 0, partLabel: "" }))} />
+              <div className="money-facts">
+                <div><b>{fmt(money.with_staff)}</b><span>give a staff count</span></div>
+                <div><b>{fmt(money.publishes_turnover)}</b><span>publish their turnover</span></div>
+              </div>
+              <div className="section-title" style={{ marginTop: 4 }}>Company size (click to map)</div>
+              <Bars
+                rows={sizeRows(money.size_bands ?? []).map((b) => ({ key: b.key, label: b.label, total: b.count, part: 0, partLabel: "" }))}
+                onPick={(key) => key && go(`/map?size=${key}`)}
+              />
+              <p className="small faint">Most small firms file short accounts, so turnover is rare. Net worth and size are the better guide.</p>
             </>
           ) : (
             <div className="soon">
               <PoundSterling size={22} />
-              <p>Turnover, staff numbers and company size are being added to the trade lists now. They'll appear here as soon as they land.</p>
+              <p>Turnover, staff numbers and company size aren't in the trade lists on this computer yet.</p>
             </div>
           )}
         </section>
@@ -252,6 +261,17 @@ export default function Dashboard() {
       </div>
     </div>
   );
+}
+
+// The trade lists' size bands, folded into the ones worth showing.
+function sizeRows(bands: { band: string; count: number }[]) {
+  const count = (test: (b: string) => boolean) => bands.filter((b) => test(b.band)).reduce((n, b) => n + b.count, 0);
+  return [
+    { key: "micro", label: "Micro (up to 10 staff)", count: count((b) => b.startsWith("micro")) },
+    { key: "small", label: "Small (up to 50)", count: count((b) => b.startsWith("small")) },
+    { key: "medium-large", label: "Medium or large", count: count((b) => b.startsWith("medium") || b.startsWith("large")) },
+    { key: "", label: "Dormant or no accounts yet", count: count((b) => b.startsWith("dormant") || b.startsWith("no accounts")) },
+  ];
 }
 
 function Donut({ part, whole }: { part: number; whole: number }) {

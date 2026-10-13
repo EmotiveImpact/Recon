@@ -451,3 +451,9 @@ td .name { font-weight: 600; }
   .kpi b { font-size: 24px; }
   .map-stats { grid-template-columns: 1fr 1fr; }
 }
+.money-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.money-facts div { padding: 10px 12px; border-radius: 10px; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--line); }
+.money-facts b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+.money-facts span { font-size: 12px; color: var(--muted); }
+.trade-row { grid-template-columns: 1.3fr 1.6fr 0.6fr 0.8fr 0.8fr 20px; }
+@media (max-width: 860px) { .trade-row { grid-template-columns: 1.2fr 1fr 0.6fr 0.7fr 0.7fr; } }

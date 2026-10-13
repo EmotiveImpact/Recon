@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Download, Globe, Mail, MapPin, Phone, PoundSterling, Search, Smartphone, X } from "lucide-react";
+import { Building2, Download, Globe, Mail, MapPin, Phone, PoundSterling, Search, Smartphone, X } from "lucide-react";
 import { api, type MapResults, type Place } from "../api";
 import { fmt, pct, RuleBadge } from "../ui";
 
@@ -13,8 +13,11 @@ const FILTERS: [string, string, typeof Mail][] = [
   ["email", "Has an email", Mail],
   ["mobile", "Has a mobile", Smartphone],
   ["website", "Has a website", Globe],
+  ["company", "Registered company", Building2],
   ["money", "Publishes turnover", PoundSterling],
 ];
+const SIZES: [string, string][] = [["", "Any size"], ["micro", "Micro"], ["small", "Small"], ["medium-large", "Medium or large"]];
+const WORTH: [string, string][] = [["", "Any worth"], ["10000", "£10k+"], ["100000", "£100k+"], ["1000000", "£1m+"]];
 const GREEN = "#34d399";
 const AMBER = "#fbbf24";
 
@@ -34,6 +37,7 @@ function popupHtml(p: Place) {
     (p.phone || p.mobile) && `<div>📞 ${esc(p.phone || p.mobile)}</div>`,
     site && `<div>🌐 ${site}</div>`,
     p.turnover && `<div>💷 Turnover ${esc(money(p.turnover))}</div>`,
+    p.net_assets && `<div>🏦 Net worth ${esc(money(p.net_assets))}${p.staff ? `, ${esc(p.staff)} staff` : ""}</div>`,
   ].filter(Boolean).join("");
   const rule = p.contact_rule === "can email"
     ? `<span class="pop-badge can">✓ Can email</span>` : `<span class="pop-badge post">✉ Post only</span>`;
@@ -48,6 +52,8 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
   const [trades, setTrades] = useState<string[]>(initial.getAll("trade"));
   const [rule, setRule] = useState("");
   const [has, setHas] = useState<string[]>([]);
+  const [size, setSize] = useState(initial.get("size") || "");
+  const [worth, setWorth] = useState(initial.get("worth") || "");
   const [data, setData] = useState<MapResults | null>(null);
   const [allTrades, setAllTrades] = useState<{ trade: string; name: string }[]>([]);
   const [busy, setBusy] = useState(false);
@@ -64,8 +70,10 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
     trades.forEach((t) => p.append("trade", t));
     if (rule) p.set("rule", rule);
     has.forEach((h) => p.append("has", h));
+    if (size) p.set("size", size);
+    if (worth) p.set("worth", worth);
     return p;
-  }, [near, km, trades, rule, has]);
+  }, [near, km, trades, rule, has, size, worth]);
 
   useEffect(() => {
     if (!mapBox.current || map.current) return;
@@ -165,6 +173,14 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
           ))}
         </div>
 
+        <div className="row" style={{ gap: 6 }}>
+          <div className="seg small">
+            {SIZES.map(([v, label]) => <button key={label} className={size === v ? "on" : ""} onClick={() => setSize(v)}>{label}</button>)}
+          </div>
+          <div className="seg small">
+            {WORTH.map(([v, label]) => <button key={label} className={worth === v ? "on" : ""} onClick={() => setWorth(v)}>{label}</button>)}
+          </div>
+        </div>
         {error && <div className="notice bad">{error}</div>}
 
         {data?.available && (
@@ -177,7 +193,8 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
             </div>
             {data.money.available && (
               <div className="small muted">
-                <PoundSterling size={13} style={{ verticalAlign: -2 }} /> {fmt(data.money.publishes_turnover)} publish their turnover ({pct(data.money.publishes_turnover ?? 0, data.money.total ?? 0)}).
+                <PoundSterling size={13} style={{ verticalAlign: -2 }} /> {fmt(data.money.registered)} registered companies ({pct(data.money.registered ?? 0, data.money.total ?? 0)}),{" "}
+                {fmt(data.money.with_net_assets)} show their net worth, {fmt(data.money.publishes_turnover)} their turnover.
               </div>
             )}
             <div className="spread">
@@ -201,7 +218,9 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
                       {p.email && <Mail size={13} />}
                       {(p.phone || p.mobile) && <Phone size={13} />}
                       {p.website && <Globe size={13} />}
-                      {p.turnover && <span className="badge green-soft">{money(p.turnover)}</span>}
+                      {p.turnover ? <span className="badge green-soft">turnover {money(p.turnover)}</span>
+                        : p.net_assets ? <span className="badge grey" style={{ padding: "0 7px", fontSize: 11 }}>worth {money(p.net_assets)}</span> : null}
+                      {p.size_band && /^(micro|small|medium|large)/.test(p.size_band) && <span className="faint small">{p.size_band}</span>}
                     </span>
                   </span>
                 </button>

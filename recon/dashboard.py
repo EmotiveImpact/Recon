@@ -32,6 +32,9 @@ SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 POSTCODE = re.compile(r"^[A-Z]{1,2}[0-9][A-Z0-9]?(?:[0-9][A-Z]{0,2})?$")
 FULL = re.compile(r"^[A-Z]{1,2}[0-9][A-Z0-9]?[0-9][A-Z]{2}$")
 AREA_LETTERS = re.compile(r"^[A-Z]{1,2}$")
+PUBLISHES = "lower(coalesce(publishes_turnover, '')) IN ('yes', 'true', '1', 'y')"
+# Size choices on the map -> what the trade lists' size_band starts with.
+SIZES = {"micro": ["micro"], "small": ["small"], "medium-large": ["medium", "large"]}
 
 
 def read_csv(path):
@@ -76,9 +79,10 @@ class Dashboard:
             slug = os.path.splitext(os.path.basename(path))[0]
             if slug != "summary" and SLUG.match(slug):
                 found[slug] = path
-        plumbers = os.path.join(self.folder, "plumbers", "uk-plumbers-with-emails.csv")
-        if os.path.exists(plumbers):
-            found.setdefault("plumbers", plumbers)
+        for name in ("uk-plumbers-with-money.csv", "uk-plumbers-with-emails.csv"):
+            plumbers = os.path.join(self.folder, "plumbers", name)
+            if os.path.exists(plumbers):
+                found.setdefault("plumbers", plumbers)
         return found
 
     def db(self):
@@ -163,10 +167,11 @@ class Dashboard:
                 return {"available": False}
             db = self.db()
             base = f"FROM places{where}"
-            total, with_number, publishes = db.execute(
+            total, with_number, publishes, worth, staff = db.execute(
                 f"""SELECT count(*), count(*) FILTER (coalesce(company_number, '') <> ''),
-                           count(*) FILTER (lower(coalesce(publishes_turnover, '')) IN
-                                            ('yes', 'true', '1', 'y'))
+                           count(*) FILTER ({PUBLISHES}),
+                           count(*) FILTER (TRY_CAST(net_assets AS DOUBLE) IS NOT NULL),
+                           count(*) FILTER (TRY_CAST(staff AS DOUBLE) IS NOT NULL)
                     {base}""", list(params)).fetchone()
             bands = db.execute(f"""SELECT coalesce(nullif(size_band, ''), 'not known'), count(*)
                                    {base} GROUP BY 1 ORDER BY 2 DESC""", list(params)).fetchall()
@@ -174,7 +179,7 @@ class Dashboard:
                                       count(*) {base} GROUP BY 1 ORDER BY 2 DESC LIMIT 12""",
                                   list(params)).fetchall()
         return {"available": True, "total": total, "registered": with_number,
-                "publishes_turnover": publishes,
+                "publishes_turnover": publishes, "with_net_assets": worth, "with_staff": staff,
                 "size_bands": [{"band": b, "count": n} for b, n in bands],
                 "account_types": [{"type": t, "count": n} for t, n in accounts]}
 
@@ -237,11 +242,21 @@ class Dashboard:
             if field in has:
                 clauses.append(f"coalesce({column}, '') <> ''")
         if "money" in has:
-            clauses.append("lower(coalesce(publishes_turnover, '')) IN ('yes', 'true', '1', 'y')")
+            clauses.append(PUBLISHES)
+        if "worth" in has:
+            clauses.append("TRY_CAST(net_assets AS DOUBLE) IS NOT NULL")
+        if "company" in has:
+            clauses.append("coalesce(company_number, '') <> ''")
         size = one(query, "size")
         if size:
-            clauses.append("size_band = ?")
-            params.append(size)
+            if size not in SIZES:
+                raise ValueError("Unknown size")
+            clauses.append("(" + " OR ".join("size_band ILIKE ?" for _ in SIZES[size]) + ")")
+            params += [f"{band}%" for band in SIZES[size]]
+        worth = one(query, "worth")
+        if worth:
+            clauses.append("TRY_CAST(net_assets AS DOUBLE) >= ?")
+            params.append(float(worth))
         return " WHERE " + " AND ".join(clauses), params
 
     def places(self, query):
@@ -298,13 +313,15 @@ class Dashboard:
         if not (self._columns & set(MONEY)):
             return {"available": False}
         db = self.db()
-        total, publishes = db.execute(
-            f"""SELECT count(*), count(*) FILTER (lower(coalesce(publishes_turnover, ''))
-                                                  IN ('yes', 'true', '1', 'y'))
+        total, registered, publishes, worth = db.execute(
+            f"""SELECT count(*), count(*) FILTER (coalesce(company_number, '') <> ''),
+                       count(*) FILTER ({PUBLISHES}),
+                       count(*) FILTER (TRY_CAST(net_assets AS DOUBLE) IS NOT NULL)
                 FROM places{where}""", params).fetchone()
         bands = db.execute(f"""SELECT coalesce(nullif(size_band, ''), 'not known'), count(*)
                                FROM places{where} GROUP BY 1 ORDER BY 2 DESC""", params).fetchall()
-        return {"available": True, "total": total, "publishes_turnover": publishes,
+        return {"available": True, "total": total, "registered": registered,
+                "publishes_turnover": publishes, "with_net_assets": worth,
                 "size_bands": [{"band": b, "count": n} for b, n in bands]}
 
     def export(self, query):
