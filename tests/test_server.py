@@ -312,6 +312,34 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual([t["trade"] for t in view["trades"]], ["builders"])
 
     @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_heat_map_counts_each_postcode_district(self):
+        heat = self.dash.heat({})
+        districts = {d["district"]: d for d in heat["districts"]}
+        self.assertEqual(set(districts), {"BN1", "BN3", "BN11"})
+        self.assertEqual(districts["BN1"]["may_email"], 1)
+        self.assertEqual(self.dash.heat({"rule": ["can email"]})["districts"][0]["district"], "BN1")
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_founded_year_comes_from_companies_house(self):
+        import duckdb
+        path = os.path.join(self.folder, "trades", "builders.csv")
+        with open(path, encoding="utf-8") as handle:
+            rows = list(csv.reader(handle))
+        rows[0].append("company_number")
+        rows[1].append("01234567")
+        for row in rows[2:]:
+            row.append("")
+        with open(path, "w", newline="", encoding="utf-8") as handle:
+            csv.writer(handle).writerows(rows)
+        os.makedirs(os.path.join(self.folder, "companies-house"))
+        out = os.path.join(self.folder, "companies-house", "companies-house-2026-10-01.parquet")
+        duckdb.sql(f"""COPY (SELECT '01234567' AS CompanyNumber, '15/03/2019' AS IncorporationDate)
+                       TO '{out}' (FORMAT parquet)""")
+        view = self.dash.places({"near": ["BN1"], "miles": ["50"]})
+        self.assertEqual(view["founded"], [{"year": 2019, "count": 1}])
+        self.assertEqual(view["by_district"][0]["district"], "BN1")
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
     def test_keeps_the_lists_when_the_shared_folder_blinks(self):
         self.assertEqual(self.dash.places({"near": ["BN1"], "miles": ["50"]})["total"], 3)
         with mock.patch.object(self.dash, "trade_files", return_value={}):

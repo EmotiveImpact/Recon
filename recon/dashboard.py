@@ -137,7 +137,25 @@ class Dashboard:
                         CASE WHEN length(upper(replace(coalesce(postcode, ''), ' ', ''))) >= 5
                              THEN upper(replace(postcode, ' ', ''))[:-4] END AS outward
                       FROM places""")
+        self._add_founded(db)
         self._loaded = stamp
+
+    def _add_founded(self, db):
+        """The year each registered company started, from the Companies House
+        file in the master database, for the "started each year" chart."""
+        db.execute("ALTER TABLE places ADD COLUMN IF NOT EXISTS founded INTEGER")
+        found = sorted(glob.glob(os.path.join(self.folder, "companies-house", "*.parquet")))
+        if not found:
+            return
+        try:
+            db.execute("""UPDATE places SET founded = ch.year FROM (
+                            SELECT CompanyNumber AS number,
+                                   TRY_CAST(right(IncorporationDate, 4) AS INTEGER) AS year
+                            FROM read_parquet(?)
+                            WHERE CompanyNumber IN (SELECT company_number FROM places)) ch
+                          WHERE places.company_number = ch.number""", [found[-1]])
+        except Exception:  # Only a nice extra: the map works without it.
+            pass
 
     # Front page -------------------------------------------------------------
 
@@ -309,6 +327,10 @@ class Dashboard:
                     LIMIT {POINT_LIMIT}""", params)
             names = [d[0] for d in rows.description]
             points = [dict(zip(names, r)) for r in rows.fetchall()]
+            districts = db.execute(f"""SELECT outward, count(*), count(*) FILTER (contact_rule = 'can email')
+                                       FROM places{where} AND outward IS NOT NULL
+                                       GROUP BY 1 ORDER BY 3 DESC, 2 DESC LIMIT 8""", params).fetchall()
+            founded = self._founded(where, params)
         for point in points:
             point["lat"] = point.pop("y")
             point["lon"] = point.pop("x")
@@ -318,12 +340,40 @@ class Dashboard:
             if centre:
                 point["miles"] = round(haversine(centre, point), 2)
         return {"available": True, "centre": centre, "miles": radius, "total": total,
+                "by_district": [{"district": d, "count": n, "may_email": m} for d, n, m in districts],
+                "founded": founded,
                 "with_email": with_email, "may_email": may, "with_phone": with_phone,
                 "with_mobile": with_mobile, "with_website": with_site,
                 "by_trade": [{"trade": t, "name": trade_name(t), "count": n} for t, n in by_trade],
                 "trades": [{"trade": t, "name": trade_name(t)} for t in self.trade_files()],
                 "money": self.money_for(where, params),
                 "shown": len(points), "points": points}
+
+    def _founded(self, where, params):
+        # Called with the lock held: companies started each year, the last 20 years.
+        rows = self.db().execute(f"""SELECT founded, count(*) FROM places{where}
+                                     AND founded >= year(current_date) - 19
+                                     GROUP BY 1 ORDER BY 1""", params).fetchall()
+        return [{"year": y, "count": n} for y, n in rows]
+
+    def heat(self, query):
+        """The whole country in postcode districts (BN1, LS1 ...): where each
+        one sits, how many businesses it has and how many may be emailed."""
+        with self.lock:
+            self._load()
+            if not self._loaded:
+                return {"available": False}
+            where, params = self._where(query, None, 0)
+            rows = self.db().execute(
+                f"""SELECT outward, avg(y), avg(x), count(*),
+                           count(*) FILTER (contact_rule = 'can email')
+                    FROM places{where} AND outward IS NOT NULL
+                    GROUP BY 1 ORDER BY 4 DESC""", params).fetchall()
+            founded = self._founded(where, params)
+        return {"available": True, "founded": founded,
+                "trades": [{"trade": t, "name": trade_name(t)} for t in self.trade_files()],
+                "districts": [{"district": d, "lat": round(y, 4), "lon": round(x, 4),
+                               "count": n, "may_email": m} for d, y, x, n, m in rows]}
 
     def money_for(self, where, params):
         # Called with the lock held: same as money(), without taking it again.

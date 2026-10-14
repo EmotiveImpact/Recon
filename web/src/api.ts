@@ -135,10 +135,19 @@ export type MapResults = {
   with_mobile: number;
   with_website: number;
   by_trade: { trade: string; name: string; count: number }[];
+  by_district: { district: string; count: number; may_email: number }[];
+  founded: { year: number; count: number }[];
   trades: { trade: string; name: string }[];
   money: Money;
   shown: number;
   points: Place[];
+};
+
+export type Heat = {
+  available: boolean;
+  founded: { year: number; count: number }[];
+  trades: { trade: string; name: string }[];
+  districts: { district: string; lat: number; lon: number; count: number; may_email: number }[];
 };
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -176,6 +185,7 @@ export const api = {
   masterExportUrl: (query: URLSearchParams) => `/api/master/export?${query}`,
   overview: () => call<Overview>("GET", "overview"),
   map: (query: URLSearchParams) => call<MapResults>("GET", `map?${query}`),
+  heat: (query: URLSearchParams) => call<Heat>("GET", `map/heat?${query}`),
   mapExportUrl: (query: URLSearchParams) => `/api/map/export?${query}`,
   categories: (country: string, words: string[]) =>
     call<{ category: string; places: number }[]>("POST", "categories", { country, words }),

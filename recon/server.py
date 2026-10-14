@@ -538,6 +538,8 @@ def handler_for(workspace, site):
                 return self._json(workspace.dashboard.overview())
             if route == ("GET", "map"):
                 return self._json(workspace.dashboard.places(query))
+            if route == ("GET", "map", "heat"):
+                return self._json(workspace.dashboard.heat(query))
             if route == ("GET", "map", "export"):
                 return self._file(workspace.dashboard.export(query))
             if route == ("GET", "runs"):

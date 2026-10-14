@@ -517,3 +517,11 @@ td .name { font-weight: 600; }
   .hud-list .map-list { max-height: 420px; }
   .hud-bottom { position: sticky; bottom: 12px; transform: none; left: auto; justify-self: center; }
 }
+.hud-rank li.click { cursor: pointer; border-radius: 6px; margin: 0 -6px; padding: 1px 6px; }
+.hud-rank li.click:hover { background: rgba(255, 255, 255, 0.05); }
+.trend { width: 100%; height: auto; display: block; }
+.trend-l { fill: var(--muted); font-size: 10px; }
+.map .leaflet-tooltip.heat-tip, .map .leaflet-tooltip.pin-label { background: rgba(14, 16, 24, 0.92); color: var(--text);
+  border: 1px solid var(--line-2); border-radius: 6px; box-shadow: none; font: 12px/1.4 Inter, system-ui, sans-serif; }
+.map .leaflet-tooltip.pin-label { font-weight: 600; padding: 3px 8px; }
+.map .leaflet-tooltip.heat-tip::before, .map .leaflet-tooltip.pin-label::before { display: none; }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Building2, Download, Globe, Layers, Mail, MapPin, Phone, PoundSterling, Search, SlidersHorizontal, Smartphone, X } from "lucide-react";
-import { api, type MapResults, type MasterResults, type Row } from "../api";
+import { api, type Heat, type MapResults, type MasterResults, type Row } from "../api";
 import { fmt, RuleBadge, splitList } from "../ui";
 
 // The one map: businesses near a postcode or town, as pins with the list beside them.
@@ -48,6 +48,12 @@ const money = (v: string) => {
   return `${sign}£${a >= 1e6 ? `${(a / 1e6).toFixed(1)}m` : a >= 1e3 ? `${Math.round(a / 1e3)}k` : fmt(a)}`;
 };
 const link = (site: string) => (/^https?:\/\//i.test(site) ? site : `https://${site}`);
+// Purple where few may be emailed, teal where many may.
+const shade = (share: number) => {
+  const t = Math.max(0, Math.min(1, share / 0.3));
+  const mix = (a: number, b: number) => Math.round(a + (b - a) * t);
+  return `rgb(${mix(124, 45)}, ${mix(92, 212)}, ${mix(255, 191)})`;
+};
 const pinColour = (i: Item) => (i.rule === "can email" ? GREEN : AMBER);
 const distance = (m: number | null) => (m === null ? "" : `${m < 10 ? m.toFixed(1) : Math.round(m)} mi`);
 
@@ -105,7 +111,7 @@ function popup(i: Item) {
 
 export default function MapView({ initial }: { initial: URLSearchParams }) {
   const [source, setSource] = useState(initial.get("source") === "all" ? "all" : "trades");
-  const start = initial.get("near") ?? (initial.getAll("trade").length || initial.get("size") || initial.get("q") ? "" : "BN1");
+  const start = initial.get("near") ?? "";
   const [typed, setTyped] = useState(start);
   const [near, setNear] = useState(start);
   const [radius, setRadius] = useState(Number(initial.get("miles")) || 5);
@@ -119,6 +125,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
   const [size, setSize] = useState(initial.get("size") || "");
   const [worth, setWorth] = useState(initial.get("worth") || "");
   const [trade, setTrade] = useState<MapResults | null>(null);
+  const [heat, setHeat] = useState<Heat | null>(null);
   const [all, setAll] = useState<MasterResults | null>(null);
   const [allTrades, setAllTrades] = useState<{ trade: string; name: string }[]>([]);
   const [busy, setBusy] = useState(false);
@@ -127,6 +134,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
   const mapBox = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
+  const label = useRef<L.Tooltip | null>(null);
   const markers = useRef<Map<Item, L.CircleMarker>>(new Map());
 
   const query = useMemo(() => {
@@ -147,6 +155,8 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
   }, [source, near, radius, trades, rule, has, size, worth, group, q, area]);
 
   const needsMore = source === "all" && !near.trim() && !q.trim() && !area;
+  // The trade lists with no place chosen: the whole country, area by area.
+  const heatMode = source === "trades" && !near.trim();
 
   useEffect(() => {
     if (!mapBox.current || map.current) return;
@@ -168,15 +178,22 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
     setBusy(true);
     const done = () => { setError(""); setBusy(false); };
     const failed = (e: Error) => { setError(e.message); setBusy(false); };
-    if (source === "trades") {
+    if (heatMode) {
+      api.heat(query).then((d) => { setHeat(d); setTrade(null); if (d.trades?.length) setAllTrades(d.trades); done(); }, failed);
+    } else if (source === "trades") {
       api.map(query).then((d) => { setTrade(d); if (d.trades?.length) setAllTrades(d.trades); done(); }, failed);
     } else {
       api.masterSearch(query).then((d) => { setAll(d); done(); }, failed);
     }
-  }, [query, needsMore]);
+  }, [query, needsMore, heatMode]);
 
   // What's on show, in one shape whichever list it came from.
   const view = useMemo(() => {
+    if (heatMode && heat?.available) {
+      const total = heat.districts.reduce((n, d) => n + d.count, 0);
+      const may = heat.districts.reduce((n, d) => n + d.may_email, 0);
+      return { items: [] as Item[], centre: null, total, may, email: 0, fourth: [heat.districts.length, "postcode areas"] as [number, string], mapped: total };
+    }
     if (source === "trades" && trade?.available) {
       return {
         items: trade.points.map(fromTrade),
@@ -194,7 +211,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
       };
     }
     return null;
-  }, [source, trade, all]);
+  }, [source, trade, all, heat, heatMode]);
 
   // Draw the pins and the circle whenever the results change.
   useEffect(() => {
@@ -204,6 +221,20 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
     group.clearLayers();
     markers.current.clear();
     if (!view) return;
+    if (heatMode && heat?.available) {
+      const top = Math.max(1, ...heat.districts.map((d) => d.count));
+      for (const d of heat.districts) {
+        L.circleMarker([d.lat, d.lon], {
+          radius: 2 + Math.sqrt(d.count / top) * 9, stroke: false,
+          fillColor: shade(d.count ? d.may_email / d.count : 0), fillOpacity: 0.6,
+        })
+          .bindTooltip(`<b>${d.district}</b><br>${fmt(d.count)} businesses, ${fmt(d.may_email)} can email`, { direction: "top", className: "heat-tip" })
+          .on("click", () => goTo(d.district))
+          .addTo(group);
+      }
+      m.fitBounds([[49.9, -7.6], [58.7, 1.8]], clear());
+      return;
+    }
     if (view.centre) {
       L.circle([view.centre.lat, view.centre.lon], {
         radius: radius * 1609.34, color: "#22d3ee", weight: 1.5, dashArray: "4 6", fillColor: "#22d3ee", fillOpacity: 0.05,
@@ -226,6 +257,16 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
       m.fitBounds(L.latLngBounds(view.items.map((i) => [i.lat, i.lon] as [number, number])), { ...clear(), maxZoom: 14 });
     }
   }, [view]);
+
+  // Write the chosen business's name on the map beside its pin.
+  useEffect(() => {
+    label.current?.remove();
+    label.current = null;
+    if (picked && map.current) {
+      label.current = L.tooltip({ permanent: true, direction: "right", offset: [8, 0], className: "pin-label" })
+        .setLatLng([picked.lat, picked.lon]).setContent(picked.name.replace(/[<>&]/g, "")).addTo(map.current);
+    }
+  }, [picked]);
 
   // The ranking down the left: trades for the trade lists, kinds of organisation otherwise.
   const ranking = useMemo(() => {
@@ -260,6 +301,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
       marker.openPopup();
     }
   };
+  const goTo = (place: string) => { setTyped(place); setNear(place); };
   const toggle = (v: string) => setHas(has.includes(v) ? has.filter((x) => x !== v) : [...has, v]);
   const switchTo = (s: string) => { setSource(s); setHas([]); };
   const filters = source === "trades" ? TRADE_FILTERS : ALL_FILTERS;
@@ -268,6 +310,9 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
   const place = view?.centre?.label || (area ? area.replaceAll("-", " ") : "");
   const top = Math.max(1, ...ranking.slice(0, 6).map((r) => r.count));
   const spreadTop = Math.max(1, ...spread.map((s) => s.count));
+  const areas = heatMode ? [...(heat?.districts ?? [])].sort((a, b) => b.may_email - a.may_email) : trade?.by_district ?? [];
+  const areaTop = Math.max(1, ...areas.slice(0, 6).map((a) => a.may_email));
+  const founded = (heatMode ? heat?.founded : source === "trades" ? trade?.founded : []) ?? [];
   const extra = (source === "trades" ? (size ? 1 : 0) + (worth ? 1 : 0) : 0) + has.length;
 
   return (
@@ -279,7 +324,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
 
       <div className="hud hud-left">
         <section className="hud-panel hud-title">
-          <h1>{place ? `Businesses near ${place}` : "Business map"}</h1>
+          <h1>{place ? `Businesses near ${place}` : heatMode ? "The whole country" : "Business map"}</h1>
           <div className="hud-en">{source === "trades" ? "UK trades, with company money" : `Every open register, ${group === "us" ? "United States" : "United Kingdom"}`}</div>
           <div className="hud-tabs">
             <button className={source === "trades" ? "on" : ""} onClick={() => switchTo("trades")}><PoundSterling size={13} /> UK trades</button>
@@ -356,9 +401,9 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
               <div>
                 <h3 className="hud-h">Businesses found</h3>
                 <div className="hud-big">{fmt(view.total)}</div>
-                <div className="hud-note">{view.centre ? `within ${radius} ${radius === 1 ? "mile" : "miles"}` : "in this search"}</div>
+                <div className="hud-note">{view.centre ? `within ${radius} ${radius === 1 ? "mile" : "miles"}` : heatMode ? "across the UK" : "in this search"}</div>
                 <div className="hud-mini">
-                  <span><b className="t-blue">{fmt(view.email)}</b> have an email</span>
+                  {!heatMode && <span><b className="t-blue">{fmt(view.email)}</b> have an email</span>}
                   <span><b className="t-pink">{fmt(view.fourth[0])}</b> {view.fourth[1]}</span>
                 </div>
               </div>
@@ -384,6 +429,28 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
               </section>
             )}
 
+            {heatMode && areas.length > 1 && (
+              <section className="hud-panel">
+                <h3 className="hud-h">{heatMode ? "Best areas to email" : "Areas here"}</h3>
+                <ol className="hud-rank">
+                  {areas.slice(0, 6).map((a, n) => (
+                    <li key={a.district} className="click" onClick={() => goTo(a.district)} title={`Show ${a.district}`}>
+                      <span className="n">{n + 1}</span>
+                      <span className="l">{a.district}</span>
+                      <span className="hud-track"><i style={{ width: `${(a.may_email / areaTop) * 100}%` }} /></span>
+                      <b>{fmt(a.may_email)}</b>
+                    </li>
+                  ))}
+                </ol>
+                <div className="hud-note">Number you can email in each postcode area. Click one to look there.</div>
+              </section>
+            )}
+
+            {heatMode ? (
+              <section className="hud-panel hud-hint">
+                <MapPin size={16} /> Bigger circles hold more businesses; teal ones have more you can email. Click one, or type a place, to see the businesses.
+              </section>
+            ) : (
             <section className="hud-panel hud-list">
               <div className="spread">
                 <h3 className="hud-h">{view.items.length < view.mapped ? `Nearest ${fmt(view.items.length)}` : "The list"}</h3>
@@ -407,13 +474,14 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
                 {!view.items.length && <div className="empty">Nothing here. Try a wider circle or fewer filters.</div>}
               </div>
             </section>
+            )}
           </>
         )}
       </div>
 
       {view && !needsMore && (
         <div className="hud hud-right">
-          {picked ? (
+          {heatMode ? null : picked ? (
             <section className="hud-panel">
               <div className="spread" style={{ alignItems: "flex-start" }}>
                 <div className="hud-pick">
@@ -460,6 +528,34 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
             </section>
           )}
 
+{!heatMode && areas.length > 1 && (
+            <section className="hud-panel">
+              <h3 className="hud-h">{heatMode ? "Best areas to email" : "Areas here"}</h3>
+              <ol className="hud-rank">
+                {areas.slice(0, 6).map((a, n) => (
+                  <li key={a.district} className="click" onClick={() => goTo(a.district)} title={`Show ${a.district}`}>
+                    <span className="n">{n + 1}</span>
+                    <span className="l">{a.district}</span>
+                    <span className="hud-track"><i style={{ width: `${(a.may_email / areaTop) * 100}%` }} /></span>
+                    <b>{fmt(a.may_email)}</b>
+                  </li>
+                ))}
+              </ol>
+              <div className="hud-note">Number you can email in each postcode area. Click one to look there.</div>
+            </section>
+          )}
+
+          {founded.length > 2 && (
+            <section className="hud-panel">
+              <div className="spread">
+                <h3 className="hud-h">Companies started each year</h3>
+                <span className="hud-note">{founded[0].year} to {founded[founded.length - 1].year}</span>
+              </div>
+              <Trend points={founded} />
+              <div className="hud-note">When the registered companies {heatMode ? "on the map" : "here"} were set up, from Companies House.</div>
+            </section>
+          )}
+
           {source === "trades" && trade?.money.available && (
             <section className="hud-panel">
               <h3 className="hud-h">Money they publish</h3>
@@ -497,6 +593,30 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
         </div>
       )}
     </div>
+  );
+}
+
+// A small line chart: companies started each year.
+function Trend({ points }: { points: { year: number; count: number }[] }) {
+  const w = 280, h = 90, pad = 4;
+  const top = Math.max(1, ...points.map((p) => p.count));
+  const xy = points.map((p, n) => [pad + (n / (points.length - 1)) * (w - pad * 2), h - 14 - (p.count / top) * (h - 26)]);
+  const line = xy.map(([x, y], n) => `${n ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const last = points[points.length - 1];
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="trend" role="img" aria-label="Companies started each year">
+      <defs>
+        <linearGradient id="trend-fill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor="#22d3ee" stopOpacity="0.25" />
+          <stop offset="1" stopColor="#22d3ee" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={`${line} L${xy[xy.length - 1][0]},${h - 14} L${xy[0][0]},${h - 14} Z`} fill="url(#trend-fill)" />
+      <path d={line} fill="none" stroke="#22d3ee" strokeWidth="1.6" />
+      {xy.map(([x, y], n) => <circle key={n} cx={x} cy={y} r="1.8" fill="#22d3ee"><title>{`${points[n].year}: ${points[n].count}`}</title></circle>)}
+      <text x={pad} y={h - 2} className="trend-l">{points[0].year}</text>
+      <text x={w - pad} y={h - 2} textAnchor="end" className="trend-l">{last.year}: {fmt(last.count)}</text>
+    </svg>
   );
 }
 
