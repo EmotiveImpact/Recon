@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { FolderKanban, History, LayoutDashboard, Map as MapIcon, Plus, Search } from "lucide-react";
 import { api, type Project } from "./api";
 import { Toaster, useRoute } from "./ui";
@@ -9,7 +9,8 @@ import Results from "./pages/Results";
 import Runs from "./pages/Runs";
 import Find from "./pages/Find";
 import Dashboard from "./pages/Dashboard";
-import MapView from "./pages/MapView";
+// The map brings its own drawing engine, so it loads only when opened.
+const MapView = lazy(() => import("./pages/MapView"));
 
 const COLOURS = ["#7c5cff", "#22d3ee", "#34d399", "#f472b6", "#fbbf24", "#60a5fa"];
 export const colourFor = (i: number) => COLOURS[i % COLOURS.length];
@@ -33,7 +34,7 @@ export default function App() {
   else if (section === "runs") page = <Runs />;
   else if (section === "projects") page = <Projects projects={projects} refresh={refresh} />;
   else if (section === "find") page = <Find key={query.toString()} initial={query} />;
-  else if (section === "map") page = <MapView initial={query} />;
+  else if (section === "map") page = <Suspense fallback={null}><MapView initial={query} /></Suspense>;
   else page = <Dashboard />;
 
   const current = section === "p" ? id : section === "t" ? projects.find((p) => p.targets.some((t) => t.slug === id))?.slug : "";
