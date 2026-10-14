@@ -334,7 +334,15 @@ def _nation_sql(postcode):
 SPLIT_BYTES = 200 * 1024 * 1024
 
 
-def split(db, path, size=SPLIT_BYTES):
+def table(out, name):
+    """Where to read a whole table: its parts folder once the file was split."""
+    folder = os.path.join(out, name)
+    if os.path.isdir(folder) and not os.path.exists(folder + ".parquet"):
+        return os.path.join(folder, "*.parquet")
+    return folder + ".parquet"
+
+
+def split(db, path, size=SPLIT_BYTES, keep=True):
     """Also write a big parquet file as <name>/part-N.parquet, each under about
     200 MB. The shared folder never passes on files over about 500 MB (they
     stay stuck waiting to upload), so only the parts are published there."""
@@ -351,6 +359,8 @@ def split(db, path, size=SPLIT_BYTES):
                    f"read_parquet('{path}', file_row_number=true) "
                    f"WHERE file_row_number % {pieces} = {piece}) TO '{written[-1]}' "
                    "(FORMAT parquet, COMPRESSION zstd)")
+    if not keep:  # The parts are enough; save the disk space.
+        os.remove(path)
     return written
 
 
@@ -358,9 +368,10 @@ def segment(out):
     """Split the organisations by country: <out>/uk/<nation>.parquet and
     <out>/us/<state>.parquet, plus a counts file for each country."""
     db = _connect(out, work="segment")
-    organisations = os.path.join(out, "organisations.parquet")
-    for whole in ("master.parquet", "organisations.parquet"):
-        split(db, os.path.join(out, whole))
+    for whole in ("master", "organisations"):
+        if os.path.exists(os.path.join(out, whole + ".parquet")):
+            split(db, os.path.join(out, whole + ".parquet"), keep=False)
+    organisations = table(out, "organisations")
     parts = {
         "uk": ("country = 'GB'", _nation_sql("postcode")),
         "us": ("country = 'US'", "CASE WHEN regexp_matches(upper(trim(region)), '^[A-Z]{2}$') "
@@ -395,8 +406,8 @@ def _merge(column):
 def summary(out):
     """Counts per source and overall, as rows of dicts."""
     db = _connect()
-    master = os.path.join(out, "master.parquet")
-    organisations = os.path.join(out, "organisations.parquet")
+    master = table(out, "master")
+    organisations = table(out, "organisations")
     per_source = db.execute(f"""
         SELECT source, count(*) AS records,
                count(*) FILTER (WHERE emails <> '') AS with_email,
@@ -435,7 +446,7 @@ def export(out, where, path):
     """Write organisations matching a SQL condition to a CSV, for example
     "kind = 'students'' union'" or "category ILIKE '%salon%' AND country = 'US'"."""
     db = _connect()
-    organisations = os.path.join(out, "organisations.parquet")
+    organisations = table(out, "organisations")
     db.execute(f"COPY (SELECT * FROM '{organisations}' WHERE {where}) TO '{path}' (HEADER)")
     return db.execute(f"SELECT count(*) FROM '{organisations}' WHERE {where}").fetchone()[0]
 
