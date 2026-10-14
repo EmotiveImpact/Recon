@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import "maplibre-gl/dist/maplibre-gl.css";
-import { maplibreGL } from "@maplibre/maplibre-gl-leaflet";
 import { Building2, Download, Globe, Layers, Mail, MapPin, Phone, PoundSterling, Search, SlidersHorizontal, Smartphone, X } from "lucide-react";
 import { api, type MapResults, type MasterResults, type Row } from "../api";
 import { fmt, RuleBadge, splitList } from "../ui";
@@ -29,8 +27,8 @@ const ALL_FILTERS: [string, string, typeof Mail][] = [
 ];
 const SIZES: [string, string][] = [["", "Any size"], ["micro", "Micro"], ["small", "Small"], ["medium-large", "Medium or large"]];
 const WORTH: [string, string][] = [["", "Any worth"], ["10000", "£10k+"], ["100000", "£100k+"], ["1000000", "£1m+"]];
-const GREEN = "#3fb6a8";
-const AMBER = "#8b93a7";
+const GREEN = "#2dd4bf";
+const AMBER = "#a78bfa";
 
 // One business on the map, whichever list it came from.
 type Item = {
@@ -90,18 +88,18 @@ function popup(i: Item) {
   box.append(el("b", "", i.name));
   box.append(el("div", "pop-sub", [i.what, [i.town, i.postcode].filter(Boolean).join(" ")].filter(Boolean).join(" · ")));
   const can = i.rule === "can email";
-  box.append(el("span", `pop-badge ${can ? "can" : "post"}`, can ? "Can email" : "Post only"));
-  if (i.email) box.append(el("div", "", i.email));
-  if (i.phone || i.mobile) box.append(el("div", "", i.phone || i.mobile));
+  box.append(el("span", `pop-badge ${can ? "can" : "post"}`, can ? "✓ Can email" : "✉ Post only"));
+  if (i.email) box.append(el("div", "", `✉️ ${i.email}`));
+  if (i.phone || i.mobile) box.append(el("div", "", `📞 ${i.phone || i.mobile}`));
   if (i.website) {
-    const a = el("a", "", i.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")) as HTMLAnchorElement;
+    const a = el("a", "", `🌐 ${i.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}`) as HTMLAnchorElement;
     a.href = link(i.website);
     a.target = "_blank";
     a.rel = "noreferrer";
     box.append(el("div"), a);
   }
-  if (i.turnover) box.append(el("div", "", `Turnover ${money(i.turnover)}`));
-  if (i.netAssets) box.append(el("div", "", `Net worth ${money(i.netAssets)}${i.staff ? `, ${i.staff} staff` : ""}`));
+  if (i.turnover) box.append(el("div", "", `💷 Turnover ${money(i.turnover)}`));
+  if (i.netAssets) box.append(el("div", "", `🏦 Net worth ${money(i.netAssets)}${i.staff ? `, ${i.staff} staff` : ""}`));
   return box;
 }
 
@@ -154,11 +152,10 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
     if (!mapBox.current || map.current) return;
     const m = L.map(mapBox.current, { preferCanvas: true, zoomControl: false, worldCopyJump: true, zoomSnap: 0.25 }).setView([54.5, -2.5], 6);
     L.control.zoom({ position: "bottomright" }).addTo(m);
-    // OpenStreetMap drawn as vectors (OpenFreeMap's dark style, free and keyless),
-    // so roads and names stay sharp at any zoom and on high-resolution screens.
-    maplibreGL({ style: "https://tiles.openfreemap.org/styles/dark", attributionControl: false }).addTo(m);
-    m.attributionControl.addAttribution(
-      '<a href="https://openfreemap.org">OpenFreeMap</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. Postcodes: <a href="https://www.geonames.org">GeoNames</a>');
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. Postcodes: <a href="https://www.geonames.org">GeoNames</a>',
+    }).addTo(m);
     layer.current = L.layerGroup().addTo(m);
     map.current = m;
     return () => { m.remove(); map.current = null; };
@@ -209,12 +206,15 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
     if (!view) return;
     if (view.centre) {
       L.circle([view.centre.lat, view.centre.lon], {
-        radius: radius * 1609.34, color: "#c9d1e0", weight: 1, opacity: 0.45, fillColor: "#c9d1e0", fillOpacity: 0.025, interactive: false,
+        radius: radius * 1609.34, color: "#22d3ee", weight: 1.5, dashArray: "4 6", fillColor: "#22d3ee", fillOpacity: 0.05,
       }).addTo(group);
     }
     for (const i of view.items) {
+      L.circleMarker([i.lat, i.lon], { radius: 11, stroke: false, fillColor: pinColour(i), fillOpacity: 0.16, interactive: false }).addTo(group);
+    }
+    for (const i of view.items) {
       const marker = L.circleMarker([i.lat, i.lon], {
-        radius: 4, color: "#0c0f15", weight: 1, opacity: 0.9, fillColor: pinColour(i), fillOpacity: 0.9,
+        radius: 5, color: "#e6fffb", weight: 0.8, opacity: 0.6, fillColor: pinColour(i), fillOpacity: 0.95,
       }).bindPopup(() => popup(i), { closeButton: false, maxWidth: 280 });
       marker.on("click", () => setPicked(i));
       marker.addTo(group);
@@ -316,7 +316,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
             </select>
           ) : (
             <div className="seg small" style={{ alignSelf: "flex-start" }}>
-              {[["uk", "United Kingdom"], ["us", "United States"]].map(([v, label]) => (
+              {[["uk", "🇬🇧 United Kingdom"], ["us", "🇺🇸 United States"]].map(([v, label]) => (
                 <button key={v} className={group === v ? "on" : ""} onClick={() => { setGroup(v); setNear(""); setTyped(""); setArea(""); }}>{label}</button>
               ))}
             </div>
@@ -392,7 +392,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
               <div className="map-list">
                 {view.items.map((i, n) => (
                   <button key={`${i.name}-${n}`} className={`map-item ${picked === i ? "on" : ""}`} onClick={() => show(i)}>
-                    <span className="pin" style={{ background: pinColour(i) }} />
+                    <span className="pin" style={{ background: pinColour(i), boxShadow: `0 0 8px ${pinColour(i)}` }} />
                     <span className="map-item-body">
                       <b>{i.name}</b>
                       <span className="cell-sub">{[i.what, i.postcode, distance(i.miles)].filter(Boolean).join(" · ")}</span>
@@ -417,7 +417,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
             <section className="hud-panel">
               <div className="spread" style={{ alignItems: "flex-start" }}>
                 <div className="hud-pick">
-                  <span className="hud-logo"><Building2 size={16} /></span>
+                  <span className="hud-logo"><Building2 size={18} /></span>
                   <div>
                     <b>{picked.name}</b>
                     <div className="cell-sub">{picked.what}</div>
@@ -451,7 +451,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
               <div className="hud-top">
                 {richest.map((i, n) => (
                   <button key={`${i.name}-${n}`} onClick={() => show(i)}>
-                    <span className="rank">{n + 1}</span>
+                    <span className="dot" style={{ background: n === 0 ? GREEN : n === 1 ? "#22d3ee" : AMBER }} />
                     <span className="l"><b>{i.name}</b><span>{i.size || i.what}{i.staff ? `, ${i.staff} staff` : ""}</span></span>
                     <span className="v">{money(i.netAssets)}</span>
                   </button>
@@ -489,7 +489,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
 
       {view && !needsMore && (
         <div className="hud-bottom">
-          {[["", "Everyone", "#c9d1e0"], ["can email", "Can email", GREEN], ["post only", "Post only", AMBER]].map(([v, label, colour]) => (
+          {[["", "Everyone", "#e5e7eb"], ["can email", "Can email", GREEN], ["post only", "Post only", AMBER]].map(([v, label, colour]) => (
             <button key={label} className={rule === v ? "on" : ""} onClick={() => setRule(v)}>
               <span className="radio" style={{ borderColor: colour, background: rule === v ? colour : "transparent" }} /> {label}
             </button>
@@ -506,8 +506,8 @@ function Ring({ part, whole }: { part: number; whole: number }) {
   const around = 2 * Math.PI * r;
   return (
     <svg viewBox="0 0 90 90" className="ring">
-      <circle cx="45" cy="45" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="4" />
-      <circle cx="45" cy="45" r={r} fill="none" stroke={GREEN} strokeWidth="4"
+      <circle cx="45" cy="45" r={r} fill="none" stroke="#7c5cff" strokeOpacity="0.85" strokeWidth="7" />
+      <circle cx="45" cy="45" r={r} fill="none" stroke="#2dd4bf" strokeWidth="7" strokeLinecap="round"
         strokeDasharray={`${share * around} ${around}`} transform="rotate(-90 45 45)" />
       <text x="45" y="46" textAnchor="middle" className="ring-v">{(share * 100).toFixed(1)}%</text>
       <text x="45" y="60" textAnchor="middle" className="ring-l">{fmt(part)}</text>
