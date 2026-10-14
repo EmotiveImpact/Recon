@@ -451,7 +451,7 @@ td .name { font-weight: 600; }
 .hud-left { left: 16px; bottom: 16px; width: 370px; }
 .hud-right { right: 16px; width: 320px; max-height: calc(100vh - 110px); overflow: auto; }
 .hud-panel { padding: 12px 14px; border-radius: 14px; background: rgba(10, 12, 20, 0.78); backdrop-filter: blur(12px);
-  border: 1px solid rgba(124, 92, 255, 0.16); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  border: 1px solid rgba(255, 255, 255, 0.07); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .hud-title h1 { margin: 0; font-size: 21px; letter-spacing: -0.01em; }
 .hud-en { font-size: 11px; color: var(--faint); margin-top: -8px; letter-spacing: 0.02em; }
 .hud-tabs { display: grid; grid-template-columns: 1fr 1fr; border-radius: 6px; overflow: hidden; background: rgba(255, 255, 255, 0.05); }
@@ -464,7 +464,7 @@ td .name { font-weight: 600; }
 .btn.lit { color: var(--accent-2); }
 .hud-more { display: grid; gap: 8px; }
 .hud-h { margin: 0; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; color: var(--text); }
-.hud-h::before { content: ""; width: 3px; height: 13px; border-radius: 2px; background: #7c5cff; box-shadow: 0 0 8px #7c5cff; }
+.hud-h::before { content: ""; width: 3px; height: 13px; border-radius: 2px; background: #7c5cff; }
 .hud-big { font-size: 36px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; margin-top: 4px; font-variant-numeric: tabular-nums; }
 .hud-note { font-size: 12px; color: var(--muted); line-height: 1.45; }
 .hud-split { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
@@ -472,7 +472,7 @@ td .name { font-weight: 600; }
 .hud-mini b { font-variant-numeric: tabular-nums; }
 .t-blue { color: var(--blue); } .t-pink { color: var(--pink); }
 .hud-ring { display: grid; gap: 6px; justify-items: center; }
-.ring { width: 96px; height: 96px; filter: drop-shadow(0 0 10px rgba(124, 92, 255, 0.35)); }
+.ring { width: 96px; height: 96px; }
 .ring-v { fill: var(--text); font-size: 15px; font-weight: 700; }
 .ring-l { fill: var(--muted); font-size: 9.5px; }
 .hud-rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }

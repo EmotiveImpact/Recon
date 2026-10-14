@@ -210,11 +210,11 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
       }).addTo(group);
     }
     for (const i of view.items) {
-      L.circleMarker([i.lat, i.lon], { radius: 11, stroke: false, fillColor: pinColour(i), fillOpacity: 0.16, interactive: false }).addTo(group);
+      L.circleMarker([i.lat, i.lon], { radius: 8, stroke: false, fillColor: pinColour(i), fillOpacity: 0.06, interactive: false }).addTo(group);
     }
     for (const i of view.items) {
       const marker = L.circleMarker([i.lat, i.lon], {
-        radius: 5, color: "#e6fffb", weight: 0.8, opacity: 0.6, fillColor: pinColour(i), fillOpacity: 0.95,
+        radius: 4.5, color: "#0b0d14", weight: 1, opacity: 0.8, fillColor: pinColour(i), fillOpacity: 0.9,
       }).bindPopup(() => popup(i), { closeButton: false, maxWidth: 280 });
       marker.on("click", () => setPicked(i));
       marker.addTo(group);
@@ -392,7 +392,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
               <div className="map-list">
                 {view.items.map((i, n) => (
                   <button key={`${i.name}-${n}`} className={`map-item ${picked === i ? "on" : ""}`} onClick={() => show(i)}>
-                    <span className="pin" style={{ background: pinColour(i), boxShadow: `0 0 8px ${pinColour(i)}` }} />
+                    <span className="pin" style={{ background: pinColour(i) }} />
                     <span className="map-item-body">
                       <b>{i.name}</b>
                       <span className="cell-sub">{[i.what, i.postcode, distance(i.miles)].filter(Boolean).join(" · ")}</span>
