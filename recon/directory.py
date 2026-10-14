@@ -105,7 +105,7 @@ class Directory:
             except ImportError:
                 raise ValueError("Searching the master database needs DuckDB: "
                                  "python3 -m pip install duckdb") from None
-            self._db = duckdb.connect()
+            self._db = duckdb.connect(config={"memory_limit": "2GB", "threads": 2})
             self._db.execute("SET enable_progress_bar = false")
         return self._db
 

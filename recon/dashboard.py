@@ -100,7 +100,7 @@ class Dashboard:
                 import duckdb  # Already needed for Overture.
             except ImportError:
                 raise ValueError("The dashboard needs DuckDB: python3 -m pip install duckdb") from None
-            self._db = duckdb.connect()
+            self._db = duckdb.connect(config={"memory_limit": "2GB", "threads": 2})
             self._db.execute("SET enable_progress_bar = false")
         return self._db
 

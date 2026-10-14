@@ -208,7 +208,7 @@ def build(master, cache, groups=("uk", "us"), geo="data/geo", db=None):
     from recon import directory  # The area files and their parts folders.
     if db is None:
         import duckdb
-        db = duckdb.connect()
+        db = duckdb.connect(config={"memory_limit": "2GB", "threads": 2})
         db.execute("SET enable_progress_bar = false")
         db.execute("SET preserve_insertion_order = false")
     os.makedirs(cache, exist_ok=True)
@@ -262,7 +262,7 @@ class Sectors:
     def db(self):
         if self._db is None:
             import duckdb
-            self._db = duckdb.connect()
+            self._db = duckdb.connect(config={"memory_limit": "2GB", "threads": 2})
             self._db.execute("SET enable_progress_bar = false")
         return self._db
 
