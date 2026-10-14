@@ -28,6 +28,8 @@ import threading
 import urllib.request
 import zipfile
 
+from recon import sectors
+
 GROUPS = ("uk", "us", "other")
 COLUMNS = ["name", "kind", "category", "legal_form", "address", "town", "region", "postcode",
            "country", "website", "emails", "phones", "socials", "people", "can_email", "sources"]
@@ -326,6 +328,9 @@ class Directory:
         if rule:
             clauses.append("can_email = ?")
             params.append(rule)
+        chosen = sectors.clause(query)
+        if chosen:  # Sector, industry and niche: see recon/sectors.py.
+            clauses.append(chosen)
         kind = one(query, "kind")
         if kind:
             clauses.append("kind ILIKE ?")

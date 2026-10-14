@@ -28,7 +28,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import dashboard, directory, finder, places
+from . import dashboard, directory, finder, places, sectors
 from .target import COUNTRY_BOX, Target
 
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
@@ -50,6 +50,8 @@ class Workspace:
                                              geo=os.path.join(self.root, "data", "geo"))
         self.dashboard = dashboard.Dashboard(
             self.directory.folder, locate=lambda place: self.directory.locate("uk", place))
+        # The sector tree's counts, from the index `python -m recon.sectors build` writes.
+        self.sectors = sectors.Sectors(os.path.join(self.root, "data", "sectors"))
         self.projects_dir = os.path.join(self.root, "projects")
         self.targets_dir = os.path.join(self.root, "targets")
         self._results = {}  # path -> (mtime, rows)
@@ -540,6 +542,16 @@ def handler_for(workspace, site):
                 return self._json(workspace.dashboard.places(query))
             if route == ("GET", "map", "heat"):
                 return self._json(workspace.dashboard.heat(query))
+            if route == ("GET", "sectors"):
+                group = query.get("group", ["uk"])[0]
+                if group not in ("uk", "us"):
+                    raise ValueError("Choose the UK or the US")
+                return self._json(workspace.sectors.tree(group))
+            if route == ("GET", "sectors", "heat"):
+                group = query.get("group", ["uk"])[0]
+                if group not in ("uk", "us"):
+                    raise ValueError("Choose the UK or the US")
+                return self._json(workspace.sectors.heat(group, query))
             if route == ("GET", "map", "export"):
                 return self._file(workspace.dashboard.export(query))
             if route == ("GET", "runs"):
@@ -634,6 +646,7 @@ def main(argv=None):
     workspace = Workspace(args.root, args.master)
     # Read the trade lists now, so the dashboard's first visit is quick.
     threading.Thread(target=workspace.dashboard.warm, daemon=True).start()
+    threading.Thread(target=workspace.sectors.warm, daemon=True).start()
     site = os.path.join(workspace.root, "web", "dist")
     server = ThreadingHTTPServer((args.host, args.port), handler_for(workspace, site))
     print(f"Recon is open at http://{'localhost' if args.host == '127.0.0.1' else args.host}:"
