@@ -110,6 +110,8 @@ class Dashboard:
         stamp = tuple((slug, path, os.path.getmtime(path)) for slug, path in files.items())
         if stamp == self._loaded:
             return
+        if not files and self._loaded:
+            return  # The shared folder blinked (files being republished): keep what we have.
         db = self.db()
         db.execute("DROP TABLE IF EXISTS places")
         if not files:

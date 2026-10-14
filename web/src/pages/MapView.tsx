@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Building2, Download, Globe, Layers, Mail, MapPin, Phone, PoundSterling, Search, Smartphone, X } from "lucide-react";
+import { Building2, Download, Globe, Layers, Mail, MapPin, Phone, PoundSterling, Search, SlidersHorizontal, Smartphone, X } from "lucide-react";
 import { api, type MapResults, type MasterResults, type Row } from "../api";
-import { fmt, pct, RuleBadge, splitList } from "../ui";
+import { fmt, RuleBadge, splitList } from "../ui";
 
 // The one map: businesses near a postcode or town, as pins with the list beside them.
 // Two kinds of list can be shown:
@@ -27,8 +27,8 @@ const ALL_FILTERS: [string, string, typeof Mail][] = [
 ];
 const SIZES: [string, string][] = [["", "Any size"], ["micro", "Micro"], ["small", "Small"], ["medium-large", "Medium or large"]];
 const WORTH: [string, string][] = [["", "Any worth"], ["10000", "£10k+"], ["100000", "£100k+"], ["1000000", "£1m+"]];
-const GREEN = "#34d399";
-const AMBER = "#fbbf24";
+const GREEN = "#2dd4bf";
+const AMBER = "#a78bfa";
 
 // One business on the map, whichever list it came from.
 type Item = {
@@ -71,6 +71,10 @@ function fromRegister(r: Row): Item {
     turnover: "", netAssets: "", accountsTo: "", sources: r.sources,
   };
 }
+
+// Keep what's found in the gap between the side panels on a wide screen.
+const clear = (): L.FitBoundsOptions => (window.innerWidth > 860
+  ? { paddingTopLeft: [400, 30], paddingBottomRight: [350, 70] } : { padding: [20, 20] });
 
 // Built from elements rather than HTML text, so a name can't inject anything.
 function popup(i: Item) {
@@ -146,7 +150,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
 
   useEffect(() => {
     if (!mapBox.current || map.current) return;
-    const m = L.map(mapBox.current, { preferCanvas: true, zoomControl: false, worldCopyJump: true }).setView([54.5, -2.5], 6);
+    const m = L.map(mapBox.current, { preferCanvas: true, zoomControl: false, worldCopyJump: true, zoomSnap: 0.25 }).setView([54.5, -2.5], 6);
     L.control.zoom({ position: "bottomright" }).addTo(m);
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
@@ -202,22 +206,50 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
     if (!view) return;
     if (view.centre) {
       L.circle([view.centre.lat, view.centre.lon], {
-        radius: radius * 1609.34, color: "#7c5cff", weight: 1.5, fillColor: "#7c5cff", fillOpacity: 0.06,
+        radius: radius * 1609.34, color: "#22d3ee", weight: 1.5, dashArray: "4 6", fillColor: "#22d3ee", fillOpacity: 0.05,
       }).addTo(group);
     }
     for (const i of view.items) {
+      L.circleMarker([i.lat, i.lon], { radius: 11, stroke: false, fillColor: pinColour(i), fillOpacity: 0.16, interactive: false }).addTo(group);
+    }
+    for (const i of view.items) {
       const marker = L.circleMarker([i.lat, i.lon], {
-        radius: 6, color: "#0b0d14", weight: 1.5, fillColor: pinColour(i), fillOpacity: 0.95,
+        radius: 5, color: "#e6fffb", weight: 0.8, opacity: 0.6, fillColor: pinColour(i), fillOpacity: 0.95,
       }).bindPopup(() => popup(i), { closeButton: false, maxWidth: 280 });
       marker.on("click", () => setPicked(i));
       marker.addTo(group);
       markers.current.set(i, marker);
     }
     if (view.centre) {
-      m.fitBounds(L.latLng(view.centre.lat, view.centre.lon).toBounds(radius * 3219), { padding: [20, 20] });
+      m.fitBounds(L.latLng(view.centre.lat, view.centre.lon).toBounds(radius * 3219), clear());
     } else if (view.items.length) {
-      m.fitBounds(L.latLngBounds(view.items.map((i) => [i.lat, i.lon] as [number, number])), { padding: [30, 30], maxZoom: 14 });
+      m.fitBounds(L.latLngBounds(view.items.map((i) => [i.lat, i.lon] as [number, number])), { ...clear(), maxZoom: 14 });
     }
+  }, [view]);
+
+  // The ranking down the left: trades for the trade lists, kinds of organisation otherwise.
+  const ranking = useMemo(() => {
+    if (source === "trades" && trade?.available) return trade.by_trade.map((t) => ({ label: t.name, count: t.count }));
+    const counts = new Map<string, number>();
+    for (const i of view?.items ?? []) {
+      // "company; dental clinic; dental practice" counts as a dental clinic.
+      const kind = i.what.split(";").map((k) => k.trim()).find((k) => k && k !== "company") ?? "";
+      if (kind) {
+        const label = kind.charAt(0).toUpperCase() + kind.slice(1);
+        counts.set(label, (counts.get(label) ?? 0) + 1);
+      }
+    }
+    return [...counts].sort((a, b) => b[1] - a[1]).map(([label, count]) => ({ label, count }));
+  }, [source, trade, view]);
+
+  // The right-hand money panels: the richest businesses here, and how their net worth spreads.
+  const richest = useMemo(() => (view?.items ?? [])
+    .filter((i) => i.netAssets && !Number.isNaN(Number(i.netAssets)))
+    .sort((a, b) => Number(b.netAssets) - Number(a.netAssets)).slice(0, 5), [view]);
+  const spread = useMemo(() => {
+    const bands = [["Under £10k", -Infinity, 1e4], ["£10k to £100k", 1e4, 1e5], ["£100k to £1m", 1e5, 1e6], ["£1m or more", 1e6, Infinity]] as const;
+    const worths = (view?.items ?? []).filter((i) => i.netAssets !== "").map((i) => Number(i.netAssets)).filter((n) => !Number.isNaN(n));
+    return bands.map(([label, lo, hi]) => ({ label, count: worths.filter((n) => n >= lo && n < hi).length }));
   }, [view]);
 
   const show = (i: Item) => {
@@ -232,165 +264,253 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
   const switchTo = (s: string) => { setSource(s); setHas([]); };
   const filters = source === "trades" ? TRADE_FILTERS : ALL_FILTERS;
   const exportUrl = source === "trades" ? api.mapExportUrl(query) : api.masterExportUrl(query);
+  const [more, setMore] = useState(false);
+  const place = view?.centre?.label || (area ? area.replaceAll("-", " ") : "");
+  const top = Math.max(1, ...ranking.slice(0, 6).map((r) => r.count));
+  const spreadTop = Math.max(1, ...spread.map((s) => s.count));
+  const extra = (source === "trades" ? (size ? 1 : 0) + (worth ? 1 : 0) : 0) + has.length;
 
   return (
     <div className="mapview">
-      <aside className="map-side">
-        <div className="seg map-source">
-          <button className={source === "trades" ? "on" : ""} onClick={() => switchTo("trades")}>
-            <PoundSterling size={13} /> UK trades, with money
-          </button>
-          <button className={source === "all" ? "on" : ""} onClick={() => switchTo("all")}>
-            <Layers size={13} /> Every register, UK and US
-          </button>
-        </div>
-        <form className="map-search" onSubmit={(e) => { e.preventDefault(); setNear(typed); setQ(qTyped); }}>
-          {source === "all" && (
-            <div className="search" style={{ gridColumn: "1 / -1" }}>
-              <Search size={16} />
-              <input className="input" value={qTyped} onChange={(e) => setQTyped(e.target.value)} placeholder="What kind? For example dentists, or care home" />
+      <div className="map-wrap">
+        <div ref={mapBox} className="map" />
+        {busy && <div className="map-busy">Looking…</div>}
+      </div>
+
+      <div className="hud hud-left">
+        <section className="hud-panel hud-title">
+          <h1>{place ? `Businesses near ${place}` : "Business map"}</h1>
+          <div className="hud-en">{source === "trades" ? "UK trades, with company money" : `Every open register, ${group === "us" ? "United States" : "United Kingdom"}`}</div>
+          <div className="hud-tabs">
+            <button className={source === "trades" ? "on" : ""} onClick={() => switchTo("trades")}><PoundSterling size={13} /> UK trades</button>
+            <button className={source === "all" ? "on" : ""} onClick={() => switchTo("all")}><Layers size={13} /> Every register</button>
+          </div>
+          <form className="map-search" onSubmit={(e) => { e.preventDefault(); setNear(typed); setQ(qTyped); }}>
+            {source === "all" && (
+              <div className="search" style={{ gridColumn: "1 / -1" }}>
+                <Search size={15} />
+                <input className="input" value={qTyped} onChange={(e) => setQTyped(e.target.value)} placeholder="What kind? For example dentists" />
+              </div>
+            )}
+            <div className="search">
+              <MapPin size={15} />
+              <input className="input" value={typed} onChange={(e) => setTyped(e.target.value)}
+                placeholder={source === "all" && group === "us" ? "ZIP code or town, e.g. Austin, TX" : "Postcode or town, e.g. BN1 or Leeds"} />
             </div>
-          )}
-          <div className="search">
-            <MapPin size={16} />
-            <input className="input" value={typed} onChange={(e) => setTyped(e.target.value)}
-              placeholder={source === "all" && group === "us" ? "ZIP code or town, for example Austin, TX" : "Postcode or town, for example BN1 or Leeds"} />
+            <button className="btn primary" type="submit" aria-label="Search"><Search size={15} /></button>
+          </form>
+          <div className="hud-row">
+            <div className="seg small radii">
+              {RADII.map((r) => (
+                <button key={r} className={radius === r ? "on" : ""} onClick={() => setRadius(r)}>{r} mi</button>
+              ))}
+            </div>
+            <button className={`btn small ghost ${more || extra ? "lit" : ""}`} onClick={() => setMore(!more)}>
+              <SlidersHorizontal size={13} /> Filters{extra ? ` (${extra})` : ""}
+            </button>
           </div>
-          <button className="btn primary" type="submit" aria-label="Search"><Search size={15} /></button>
-        </form>
-        <div className="row" style={{ gap: 6 }}>
-          <span className="small muted">Within</span>
-          <div className="seg small">
-            {RADII.map((r) => (
-              <button key={r} className={radius === r ? "on" : ""} onClick={() => setRadius(r)}>{r} {r === 1 ? "mile" : "mi"}</button>
-            ))}
-          </div>
-        </div>
-        {source === "trades" ? (
-          <>
+          {source === "trades" ? (
             <select className="input select" value={trades[0] ?? ""} onChange={(e) => setTrades(e.target.value ? [e.target.value] : [])}>
               <option value="">Every trade</option>
               {allTrades.map((t) => <option key={t.trade} value={t.trade}>{tradeName(t.trade)}</option>)}
             </select>
-            <div className="row" style={{ gap: 6 }}>
-              <div className="seg small">
-                {SIZES.map(([v, label]) => <button key={label} className={size === v ? "on" : ""} onClick={() => setSize(v)}>{label}</button>)}
-              </div>
-              <div className="seg small">
-                {WORTH.map(([v, label]) => <button key={label} className={worth === v ? "on" : ""} onClick={() => setWorth(v)}>{label}</button>)}
+          ) : (
+            <div className="seg small" style={{ alignSelf: "flex-start" }}>
+              {[["uk", "🇬🇧 United Kingdom"], ["us", "🇺🇸 United States"]].map(([v, label]) => (
+                <button key={v} className={group === v ? "on" : ""} onClick={() => { setGroup(v); setNear(""); setTyped(""); setArea(""); }}>{label}</button>
+              ))}
+            </div>
+          )}
+          {more && (
+            <div className="hud-more">
+              {source === "trades" && (
+                <>
+                  <div className="seg small">
+                    {SIZES.map(([v, label]) => <button key={label} className={size === v ? "on" : ""} onClick={() => setSize(v)}>{label}</button>)}
+                  </div>
+                  <div className="seg small">
+                    {WORTH.map(([v, label]) => <button key={label} className={worth === v ? "on" : ""} onClick={() => setWorth(v)}>{label}</button>)}
+                  </div>
+                </>
+              )}
+              <div className="chips">
+                {filters.map(([v, label, Icon]) => (
+                  <button key={v} className={`chip ${has.includes(v) ? "on" : ""}`} onClick={() => toggle(v)}><Icon size={13} /> {label}</button>
+                ))}
               </div>
             </div>
-          </>
-        ) : (
-          <div className="seg small" style={{ alignSelf: "flex-start" }}>
-            {[["uk", "🇬🇧 United Kingdom"], ["us", "🇺🇸 United States"]].map(([v, label]) => (
-              <button key={v} className={group === v ? "on" : ""} onClick={() => { setGroup(v); setNear(""); setTyped(""); setArea(""); }}>{label}</button>
-            ))}
-          </div>
-        )}
-        <div className="chips">
-          {[["", "Everyone"], ["can email", "Can email"], ["post only", "Post only"]].map(([v, label]) => (
-            <button key={label} className={`chip ${rule === v ? "on" : ""}`} onClick={() => setRule(v)}>{label}</button>
-          ))}
-          {filters.map(([v, label, Icon]) => (
-            <button key={v} className={`chip ${has.includes(v) ? "on" : ""}`} onClick={() => toggle(v)}>
-              <Icon size={13} /> {label}
-            </button>
-          ))}
-        </div>
-
-        {source === "all" && area && !near.trim() && (
-          <div className="chips">
-            <button className="chip on" onClick={() => setArea("")}>Only {area.replaceAll("-", " ")} <X size={12} /></button>
-          </div>
-        )}
-        {error && <div className="notice bad">{error}</div>}
-        {needsMore && <div className="notice">Type a place, a kind of business, or both.</div>}
-        {source === "trades" && trade && !trade.available && (
-          <div className="notice warn">The trade lists aren't on this computer yet, so there's nothing to map.</div>
-        )}
+          )}
+          {source === "all" && area && !near.trim() && (
+            <div className="chips"><button className="chip on" onClick={() => setArea("")}>Only {area.replaceAll("-", " ")} <X size={12} /></button></div>
+          )}
+          {error && <div className="notice bad">{error}</div>}
+          {needsMore && <div className="notice">Type a place, a kind of business, or both.</div>}
+          {source === "trades" && trade && !trade.available && (
+            <div className="notice warn">The trade lists aren't on this computer yet, so there's nothing to map.</div>
+          )}
+        </section>
 
         {view && !needsMore && (
           <>
-            <div className="map-stats" style={{ opacity: busy ? 0.5 : 1 }}>
-              <div><b>{fmt(view.total)}</b><span>found{view.centre ? ` within ${radius} ${radius === 1 ? "mile" : "miles"} of ${view.centre.label}` : ""}</span></div>
-              <div className="green"><b>{fmt(view.may)}</b><span>can email</span></div>
-              <div className="blue"><b>{fmt(view.email)}</b><span>have an email</span></div>
-              <div className="pink"><b>{fmt(view.fourth[0])}</b><span>{view.fourth[1]}</span></div>
-            </div>
-            {source === "trades" && trade?.money.available && (
-              <div className="small muted">
-                <PoundSterling size={13} style={{ verticalAlign: -2 }} /> {fmt(trade.money.registered)} registered companies ({pct(trade.money.registered ?? 0, trade.money.total ?? 0)}),{" "}
-                {fmt(trade.money.with_net_assets)} show their net worth, {fmt(trade.money.publishes_turnover)} their turnover.
+            <section className="hud-panel hud-split" style={{ opacity: busy ? 0.5 : 1 }}>
+              <div>
+                <h3 className="hud-h">Businesses found</h3>
+                <div className="hud-big">{fmt(view.total)}</div>
+                <div className="hud-note">{view.centre ? `within ${radius} ${radius === 1 ? "mile" : "miles"}` : "in this search"}</div>
+                <div className="hud-mini">
+                  <span><b className="t-blue">{fmt(view.email)}</b> have an email</span>
+                  <span><b className="t-pink">{fmt(view.fourth[0])}</b> {view.fourth[1]}</span>
+                </div>
               </div>
-            )}
-            {source === "all" && (
-              <div className="small faint">
-                Each pin sits at the middle of its {group === "us" ? "ZIP code" : "postcode"}.{" "}
-                {view.mapped < view.total ? `${fmt(view.mapped)} of ${fmt(view.total)} have one we can place.` : ""}
+              <div className="hud-ring">
+                <h3 className="hud-h">Can email</h3>
+                <Ring part={view.may} whole={view.total} />
               </div>
+            </section>
+
+            {ranking.length > 0 && (
+              <section className="hud-panel">
+                <h3 className="hud-h">{source === "trades" ? "Trades here" : "Kinds here"}</h3>
+                <ol className="hud-rank">
+                  {ranking.slice(0, 6).map((r, n) => (
+                    <li key={r.label}>
+                      <span className="n">{n + 1}</span>
+                      <span className="l">{r.label}</span>
+                      <span className="hud-track"><i style={{ width: `${(r.count / top) * 100}%` }} /></span>
+                      <b>{fmt(r.count)}</b>
+                    </li>
+                  ))}
+                </ol>
+              </section>
             )}
-            <div className="spread">
-              <span className="small faint">
-                {view.items.length < view.mapped ? `${view.centre ? "Nearest" : "Best"} ${fmt(view.items.length)} shown. ` : ""}
-                <span className="legend-dot" style={{ background: GREEN }} /> can email
-                <span className="legend-dot" style={{ background: AMBER, marginLeft: 10 }} /> post only
-              </span>
-              <a className="btn small" href={exportUrl}><Download size={14} /> Download</a>
-            </div>
-            <div className="map-list">
-              {view.items.map((i, n) => (
-                <button key={`${i.name}-${n}`} className={`map-item ${picked === i ? "on" : ""}`} onClick={() => show(i)}>
-                  <span className="pin" style={{ background: pinColour(i) }} />
-                  <span className="map-item-body">
-                    <b>{i.name}</b>
-                    <span className="cell-sub">
-                      {[i.what, i.postcode, distance(i.miles)].filter(Boolean).join(" · ")}
+
+            <section className="hud-panel hud-list">
+              <div className="spread">
+                <h3 className="hud-h">{view.items.length < view.mapped ? `Nearest ${fmt(view.items.length)}` : "The list"}</h3>
+                <a className="btn small ghost" href={exportUrl}><Download size={13} /> Download</a>
+              </div>
+              <div className="map-list">
+                {view.items.map((i, n) => (
+                  <button key={`${i.name}-${n}`} className={`map-item ${picked === i ? "on" : ""}`} onClick={() => show(i)}>
+                    <span className="pin" style={{ background: pinColour(i), boxShadow: `0 0 8px ${pinColour(i)}` }} />
+                    <span className="map-item-body">
+                      <b>{i.name}</b>
+                      <span className="cell-sub">{[i.what, i.postcode, distance(i.miles)].filter(Boolean).join(" · ")}</span>
                     </span>
                     <span className="map-item-icons">
-                      {i.email && <Mail size={13} />}
-                      {(i.phone || i.mobile) && <Phone size={13} />}
-                      {i.website && <Globe size={13} />}
-                      {i.turnover ? <span className="badge green-soft">turnover {money(i.turnover)}</span>
-                        : i.netAssets ? <span className="badge grey" style={{ padding: "0 7px", fontSize: 11 }}>worth {money(i.netAssets)}</span> : null}
-                      {/^(micro|small|medium|large)/.test(i.size) && <span className="faint small">{i.size}</span>}
+                      {i.email && <Mail size={12} />}
+                      {(i.phone || i.mobile) && <Phone size={12} />}
+                      {i.website && <Globe size={12} />}
                     </span>
-                  </span>
-                </button>
-              ))}
-              {!view.items.length && <div className="empty">Nothing here. Try a wider circle or fewer filters.</div>}
-            </div>
+                  </button>
+                ))}
+                {!view.items.length && <div className="empty">Nothing here. Try a wider circle or fewer filters.</div>}
+              </div>
+            </section>
           </>
         )}
-      </aside>
-      <div className="map-wrap">
-        <div ref={mapBox} className="map" />
-        {busy && <div className="map-busy">Looking…</div>}
-        {picked && (
-          <div className="map-card">
-            <div className="spread" style={{ alignItems: "flex-start" }}>
-              <div>
-                <b>{picked.name}</b>
-                <div className="cell-sub">{[picked.address, picked.town, picked.postcode].filter(Boolean).join(", ")}</div>
-              </div>
-              <button className="btn ghost small" onClick={() => setPicked(null)} aria-label="Close"><X size={14} /></button>
-            </div>
-            <RuleBadge rule={picked.rule} />
-            <dl className="kv">
-              {picked.what && (<><dt>What</dt><dd>{picked.what}</dd></>)}
-              {picked.email && (<><dt>Email</dt><dd>{picked.email} <span className="faint small">{picked.emailType}</span></dd></>)}
-              {picked.phone && (<><dt>Phone</dt><dd>{picked.phone}</dd></>)}
-              {picked.mobile && picked.mobile !== picked.phone && (<><dt>Mobile</dt><dd>{picked.mobile}</dd></>)}
-              {picked.website && (<><dt>Website</dt><dd><a href={link(picked.website)} target="_blank" rel="noreferrer" style={{ color: "var(--accent-2)" }}>{picked.website.replace(/^https?:\/\/(www\.)?/, "")}</a></dd></>)}
-              {(picked.company || picked.companyType) && (<><dt>Company</dt><dd>{picked.company} {picked.companyType && <span className="faint small">{picked.companyType}</span>}</dd></>)}
-              {picked.size && (<><dt>Size</dt><dd>{picked.size}{picked.staff ? `, ${picked.staff} staff` : ""}</dd></>)}
-              {picked.netAssets && (<><dt>Net worth</dt><dd>{money(picked.netAssets)}{picked.accountsTo ? ` (accounts to ${picked.accountsTo})` : ""}</dd></>)}
-              {picked.turnover && (<><dt>Turnover</dt><dd>{money(picked.turnover)}</dd></>)}
-              {picked.sources && (<><dt>Found in</dt><dd className="small">{picked.sources.split(";").map((s) => s.trim()).filter(Boolean).join(", ")}</dd></>)}
-            </dl>
-          </div>
-        )}
       </div>
+
+      {view && !needsMore && (
+        <div className="hud hud-right">
+          {picked ? (
+            <section className="hud-panel">
+              <div className="spread" style={{ alignItems: "flex-start" }}>
+                <div className="hud-pick">
+                  <span className="hud-logo"><Building2 size={18} /></span>
+                  <div>
+                    <b>{picked.name}</b>
+                    <div className="cell-sub">{picked.what}</div>
+                  </div>
+                </div>
+                <button className="btn ghost small" onClick={() => setPicked(null)} aria-label="Close"><X size={14} /></button>
+              </div>
+              <RuleBadge rule={picked.rule} />
+              <dl className="kv">
+                <dt>Address</dt><dd>{[picked.address, picked.town, picked.postcode].filter(Boolean).join(", ") || "Not known"}</dd>
+                {picked.email && (<><dt>Email</dt><dd>{picked.email} <span className="faint small">{picked.emailType}</span></dd></>)}
+                {picked.phone && (<><dt>Phone</dt><dd>{picked.phone}</dd></>)}
+                {picked.mobile && picked.mobile !== picked.phone && (<><dt>Mobile</dt><dd>{picked.mobile}</dd></>)}
+                {picked.website && (<><dt>Website</dt><dd><a href={link(picked.website)} target="_blank" rel="noreferrer" style={{ color: "var(--accent-2)" }}>{picked.website.replace(/^https?:\/\/(www\.)?/, "")}</a></dd></>)}
+                {(picked.company || picked.companyType) && (<><dt>Company</dt><dd>{picked.company} {picked.companyType && <span className="faint small">{picked.companyType}</span>}</dd></>)}
+                {picked.size && (<><dt>Size</dt><dd>{picked.size}{picked.staff ? `, ${picked.staff} staff` : ""}</dd></>)}
+                {picked.netAssets && (<><dt>Net worth</dt><dd>{money(picked.netAssets)}{picked.accountsTo ? ` (accounts to ${picked.accountsTo})` : ""}</dd></>)}
+                {picked.turnover && (<><dt>Turnover</dt><dd>{money(picked.turnover)}</dd></>)}
+                {picked.sources && (<><dt>Found in</dt><dd className="small">{picked.sources.split(";").map((s) => s.trim()).filter(Boolean).join(", ")}</dd></>)}
+              </dl>
+            </section>
+          ) : (
+            <section className="hud-panel hud-hint">
+              <MapPin size={16} /> Click a pin or a name to see the business here.
+            </section>
+          )}
+
+          {richest.length > 0 && (
+            <section className="hud-panel">
+              <h3 className="hud-h">Richest here, by net worth</h3>
+              <div className="hud-top">
+                {richest.map((i, n) => (
+                  <button key={`${i.name}-${n}`} onClick={() => show(i)}>
+                    <span className="dot" style={{ background: n === 0 ? GREEN : n === 1 ? "#22d3ee" : AMBER }} />
+                    <span className="l"><b>{i.name}</b><span>{i.size || i.what}{i.staff ? `, ${i.staff} staff` : ""}</span></span>
+                    <span className="v">{money(i.netAssets)}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {source === "trades" && trade?.money.available && (
+            <section className="hud-panel">
+              <h3 className="hud-h">Money they publish</h3>
+              <div className="hud-bars">
+                {spread.map((s) => (
+                  <div key={s.label}>
+                    <span>{s.label}</span>
+                    <span className="hud-track"><i style={{ width: `${(s.count / spreadTop) * 100}%` }} /></span>
+                    <b>{fmt(s.count)}</b>
+                  </div>
+                ))}
+              </div>
+              <div className="hud-note" style={{ marginTop: 8 }}>
+                {fmt(trade.money.registered)} registered companies here. {fmt(trade.money.with_net_assets)} show their net worth
+                and {fmt(trade.money.publishes_turnover)} publish their turnover.
+              </div>
+            </section>
+          )}
+          {source === "all" && (
+            <section className="hud-panel hud-note">
+              Each pin sits at the middle of its {group === "us" ? "ZIP code" : "postcode"}.{" "}
+              {view.mapped < view.total ? `${fmt(view.mapped)} of ${fmt(view.total)} have one we can place.` : ""}
+            </section>
+          )}
+        </div>
+      )}
+
+      {view && !needsMore && (
+        <div className="hud-bottom">
+          {[["", "Everyone", "#e5e7eb"], ["can email", "Can email", GREEN], ["post only", "Post only", AMBER]].map(([v, label, colour]) => (
+            <button key={label} className={rule === v ? "on" : ""} onClick={() => setRule(v)}>
+              <span className="radio" style={{ borderColor: colour, background: rule === v ? colour : "transparent" }} /> {label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+function Ring({ part, whole }: { part: number; whole: number }) {
+  const share = whole ? part / whole : 0;
+  const r = 34;
+  const around = 2 * Math.PI * r;
+  return (
+    <svg viewBox="0 0 90 90" className="ring">
+      <circle cx="45" cy="45" r={r} fill="none" stroke="#7c5cff" strokeOpacity="0.85" strokeWidth="7" />
+      <circle cx="45" cy="45" r={r} fill="none" stroke="#2dd4bf" strokeWidth="7" strokeLinecap="round"
+        strokeDasharray={`${share * around} ${around}`} transform="rotate(-90 45 45)" />
+      <text x="45" y="46" textAnchor="middle" className="ring-v">{(share * 100).toFixed(1)}%</text>
+      <text x="45" y="60" textAnchor="middle" className="ring-l">{fmt(part)}</text>
+    </svg>
   );
 }

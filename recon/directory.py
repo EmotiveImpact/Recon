@@ -134,7 +134,10 @@ class Directory:
             if not paths:
                 raise LookupError(f"No {area} in the master database")
             return paths
-        return [p for a in self.areas(group) for p in self._area_files(group, a)]
+        paths = [p for a in self.areas(group) for p in self._area_files(group, a)]
+        if not paths:  # The shared folder can blink while files are republished.
+            raise LookupError("The master database can't be read just now. Try again in a minute.")
+        return paths
 
     # What's in it -----------------------------------------------------------
 

@@ -9,6 +9,7 @@ import shutil
 import tempfile
 import threading
 import unittest
+from unittest import mock
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
@@ -309,6 +310,12 @@ class DashboardTests(unittest.TestCase):
         view = self.dash.overview()
         self.assertEqual(view["countries"]["uk"]["totals"]["organisations"], 120)
         self.assertEqual([t["trade"] for t in view["trades"]], ["builders"])
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_keeps_the_lists_when_the_shared_folder_blinks(self):
+        self.assertEqual(self.dash.places({"near": ["BN1"], "miles": ["50"]})["total"], 3)
+        with mock.patch.object(self.dash, "trade_files", return_value={}):
+            self.assertEqual(self.dash.places({"near": ["BN1"], "miles": ["50"]})["total"], 3)
 
     @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
     def test_postcode_district_does_not_catch_its_longer_neighbours(self):
