@@ -377,14 +377,16 @@ class Sectors:
         where += (" AND " if where else " WHERE ") + "district IS NOT NULL"
         with self.lock:
             rows = self.db().execute(f"""
-                WITH found AS (SELECT district, count(*) AS n, count(*) FILTER (may) AS m
+                WITH found AS (SELECT district, count(*) AS n, count(*) FILTER (may) AS m,
+                                      count(*) FILTER (email) AS e, count(*) FILTER (phone) AS p
                                FROM {self._source(group)}{where} GROUP BY 1)
-                SELECT district, lat, lon, n, m
+                SELECT district, lat, lon, n, m, e, p
                 FROM found JOIN read_parquet(?) USING (district)
                 ORDER BY n DESC""", [centres]).fetchall()
         return {"available": True,
-                "districts": [{"district": d, "lat": y, "lon": x, "count": n, "may_email": m}
-                              for d, y, x, n, m in rows]}
+                "districts": [{"district": d, "lat": y, "lon": x, "count": n, "may_email": m,
+                               "with_email": e, "with_phone": p}
+                              for d, y, x, n, m, e, p in rows]}
 
 
 def main(argv=None):

@@ -59,6 +59,8 @@ class SectorTests(unittest.TestCase):
     def test_heat_map_places_each_district(self):
         heat = self.sectors.heat("uk", {"sector": ["trades"]})
         self.assertEqual({d["district"] for d in heat["districts"]}, {"LS1", "BN1"})
+        by = {d["district"]: d for d in heat["districts"]}
+        self.assertEqual((by["LS1"]["with_email"], by["BN1"]["with_email"]), (1, 0))
         heat = self.sectors.heat("uk", {"niche": ["43220"]})
         self.assertEqual([d["district"] for d in heat["districts"]], ["LS1"])
         heat = self.sectors.heat("uk", {"sector": ["trades"], "rule": ["can email"]})

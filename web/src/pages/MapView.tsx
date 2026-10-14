@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Building2, Download, Globe, Layers, Mail, MapPin, Phone, PoundSterling, Search, SlidersHorizontal, Smartphone, X } from "lucide-react";
-import { api, type Heat, type MapResults, type MasterResults, type Row } from "../api";
+import { api, type Heat, type MapResults, type MasterResults, type Row, type SectorTree } from "../api";
 import { fmt, RuleBadge, splitList } from "../ui";
 
 // The one map: businesses near a postcode or town, as pins with the list beside them.
@@ -110,7 +110,7 @@ function popup(i: Item) {
 }
 
 export default function MapView({ initial }: { initial: URLSearchParams }) {
-  const [source, setSource] = useState(initial.get("source") === "all" ? "all" : "trades");
+  const [source, setSource] = useState(initial.get("source") === "trades" ? "trades" : "all");
   const start = initial.get("near") ?? "";
   const [typed, setTyped] = useState(start);
   const [near, setNear] = useState(start);
@@ -124,6 +124,10 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
   const [has, setHas] = useState<string[]>([]);
   const [size, setSize] = useState(initial.get("size") || "");
   const [worth, setWorth] = useState(initial.get("worth") || "");
+  const [sector, setSector] = useState(initial.get("sector") ?? "");
+  const [industry, setIndustry] = useState(initial.get("industry") ?? "");
+  const [niche, setNiche] = useState(initial.get("niche") ?? "");
+  const [tree, setTree] = useState<SectorTree | null>(null);
   const [trade, setTrade] = useState<MapResults | null>(null);
   const [heat, setHeat] = useState<Heat | null>(null);
   const [all, setAll] = useState<MasterResults | null>(null);
@@ -150,13 +154,29 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
       p.set("group", group);
       if (q.trim()) p.set("q", q.trim());
       if (area && !near.trim()) p.set("area", area);
+      if (sector) p.set("sector", sector);
+      if (industry) p.set("industry", industry);
+      if (niche) p.set("niche", niche);
     }
     return p;
-  }, [source, near, radius, trades, rule, has, size, worth, group, q, area]);
+  }, [source, near, radius, trades, rule, has, size, worth, group, q, area, sector, industry, niche]);
 
-  const needsMore = source === "all" && !near.trim() && !q.trim() && !area;
-  // The trade lists with no place chosen: the whole country, area by area.
-  const heatMode = source === "trades" && !near.trim();
+  // With no place chosen, the map shows the whole country area by area:
+  // the trade lists, or every organisation in the chosen sector.
+  const sectorHeat = source === "all" && !near.trim() && !q.trim() && !area && !!tree?.available;
+  const heatMode = (source === "trades" && !near.trim()) || sectorHeat;
+  const needsMore = source === "all" && !near.trim() && !q.trim() && !area && !sectorHeat;
+
+  useEffect(() => {
+    setTree(null);
+    api.sectors(group).then(setTree, () => setTree(null));
+  }, [group]);
+  const chosen = tree?.sectors.find((s) => s.sector === sector);
+  const chosenIndustry = chosen?.industries.find((i) => i.industry === industry);
+  const chosenNiche = chosenIndustry?.niches.find((n) => n.niche === niche);
+  const pickSector = (v: string) => { setSector(v); setIndustry(""); setNiche(""); };
+  const pickIndustry = (v: string) => { setIndustry(v); setNiche(""); };
+  const path = [chosen?.name, chosenIndustry?.name, chosenNiche?.name].filter(Boolean) as string[];
 
   useEffect(() => {
     if (!mapBox.current || map.current) return;
@@ -178,21 +198,26 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
     setBusy(true);
     const done = () => { setError(""); setBusy(false); };
     const failed = (e: Error) => { setError(e.message); setBusy(false); };
-    if (heatMode) {
+    if (sectorHeat) {
+      api.sectorHeat(query).then((d) => { setHeat(d); setAll(null); done(); }, failed);
+    } else if (heatMode) {
       api.heat(query).then((d) => { setHeat(d); setTrade(null); if (d.trades?.length) setAllTrades(d.trades); done(); }, failed);
     } else if (source === "trades") {
       api.map(query).then((d) => { setTrade(d); if (d.trades?.length) setAllTrades(d.trades); done(); }, failed);
     } else {
       api.masterSearch(query).then((d) => { setAll(d); done(); }, failed);
     }
-  }, [query, needsMore, heatMode]);
+  }, [query, needsMore, heatMode, sectorHeat]);
 
   // What's on show, in one shape whichever list it came from.
   const view = useMemo(() => {
     if (heatMode && heat?.available) {
       const total = heat.districts.reduce((n, d) => n + d.count, 0);
       const may = heat.districts.reduce((n, d) => n + d.may_email, 0);
-      return { items: [] as Item[], centre: null, total, may, email: 0, fourth: [heat.districts.length, "postcode areas"] as [number, string], mapped: total };
+      const email = heat.districts.reduce((n, d) => n + (d.with_email ?? 0), 0);
+      const phone = heat.districts.reduce((n, d) => n + (d.with_phone ?? 0), 0);
+      const fourth = (sectorHeat ? [phone, "have a phone"] : [heat.districts.length, "postcode areas"]) as [number, string];
+      return { items: [] as Item[], centre: null, total, may, email, fourth, mapped: total };
     }
     if (source === "trades" && trade?.available) {
       return {
@@ -211,7 +236,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
       };
     }
     return null;
-  }, [source, trade, all, heat, heatMode]);
+  }, [source, trade, all, heat, heatMode, sectorHeat]);
 
   // Draw the pins and the circle whenever the results change.
   useEffect(() => {
@@ -269,7 +294,12 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
   }, [picked]);
 
   // The ranking down the left: trades for the trade lists, kinds of organisation otherwise.
-  const ranking = useMemo(() => {
+  const ranking = useMemo((): { label: string; count: number; pick?: () => void }[] => {
+    if (sectorHeat && tree) {
+      if (chosenIndustry) return chosenIndustry.niches.map((n) => ({ label: n.name, count: n.count, pick: chosenNiche ? undefined : () => setNiche(n.niche) }));
+      if (chosen) return chosen.industries.map((i) => ({ label: i.name, count: i.count, pick: () => pickIndustry(i.industry) }));
+      return tree.sectors.map((s) => ({ label: s.name, count: s.count, pick: () => pickSector(s.sector) }));
+    }
     if (source === "trades" && trade?.available) return trade.by_trade.map((t) => ({ label: t.name, count: t.count }));
     const counts = new Map<string, number>();
     for (const i of view?.items ?? []) {
@@ -281,7 +311,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
       }
     }
     return [...counts].sort((a, b) => b[1] - a[1]).map(([label, count]) => ({ label, count }));
-  }, [source, trade, view]);
+  }, [source, trade, view, sectorHeat, tree, chosen, chosenIndustry, chosenNiche]);
 
   // The right-hand money panels: the richest businesses here, and how their net worth spreads.
   const richest = useMemo(() => (view?.items ?? [])
@@ -324,11 +354,11 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
 
       <div className="hud hud-left">
         <section className="hud-panel hud-title">
-          <h1>{place ? `Businesses near ${place}` : heatMode ? "The whole country" : "Business map"}</h1>
-          <div className="hud-en">{source === "trades" ? "UK trades, with company money" : `Every open register, ${group === "us" ? "United States" : "United Kingdom"}`}</div>
+          <h1>{place ? `Businesses near ${place}` : heatMode ? (path.at(-1) ?? "The whole country") : "Business map"}</h1>
+          <div className="hud-en">{source === "trades" ? "UK trades, with company money" : `Every organisation, ${group === "us" ? "United States" : "United Kingdom"}`}</div>
           <div className="hud-tabs">
-            <button className={source === "trades" ? "on" : ""} onClick={() => switchTo("trades")}><PoundSterling size={13} /> UK trades</button>
-            <button className={source === "all" ? "on" : ""} onClick={() => switchTo("all")}><Layers size={13} /> Every register</button>
+            <button className={source === "all" ? "on" : ""} onClick={() => switchTo("all")}><Layers size={13} /> Every organisation</button>
+            <button className={source === "trades" ? "on" : ""} onClick={() => switchTo("trades")}><PoundSterling size={13} /> Trades with money</button>
           </div>
           <form className="map-search" onSubmit={(e) => { e.preventDefault(); setNear(typed); setQ(qTyped); }}>
             {source === "all" && (
@@ -362,8 +392,35 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
           ) : (
             <div className="seg small" style={{ alignSelf: "flex-start" }}>
               {[["uk", "🇬🇧 United Kingdom"], ["us", "🇺🇸 United States"]].map(([v, label]) => (
-                <button key={v} className={group === v ? "on" : ""} onClick={() => { setGroup(v); setNear(""); setTyped(""); setArea(""); }}>{label}</button>
+                <button key={v} className={group === v ? "on" : ""} onClick={() => { setGroup(v); setNear(""); setTyped(""); setArea(""); pickSector(""); }}>{label}</button>
               ))}
+            </div>
+          )}
+          {source === "all" && tree?.available && (
+            <div className="sector-pick">
+              <div className="sector-path">
+                <button className={path.length ? "" : "on"} onClick={() => pickSector("")}>All sectors</button>
+                {path.map((name, n) => (
+                  <button key={name} className={n === path.length - 1 ? "on" : ""}
+                    onClick={() => (n === 0 ? pickIndustry("") : setNiche(""))}>{name}</button>
+                ))}
+              </div>
+              <select className="input select" value={sector} onChange={(e) => pickSector(e.target.value)} aria-label="Sector">
+                <option value="">Every sector</option>
+                {tree.sectors.map((s) => <option key={s.sector} value={s.sector}>{s.name} ({fmt(s.count)})</option>)}
+              </select>
+              {chosen && (
+                <select className="input select" value={industry} onChange={(e) => pickIndustry(e.target.value)} aria-label="Industry">
+                  <option value="">Every industry</option>
+                  {chosen.industries.map((i) => <option key={i.industry} value={i.industry}>{i.name} ({fmt(i.count)})</option>)}
+                </select>
+              )}
+              {chosenIndustry && (
+                <select className="input select" value={niche} onChange={(e) => setNiche(e.target.value)} aria-label="Niche">
+                  <option value="">Every niche</option>
+                  {chosenIndustry.niches.map((n) => <option key={n.niche} value={n.niche}>{n.name} ({fmt(n.count)})</option>)}
+                </select>
+              )}
             </div>
           )}
           {more && (
@@ -403,7 +460,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
                 <div className="hud-big">{fmt(view.total)}</div>
                 <div className="hud-note">{view.centre ? `within ${radius} ${radius === 1 ? "mile" : "miles"}` : heatMode ? "across the UK" : "in this search"}</div>
                 <div className="hud-mini">
-                  {!heatMode && <span><b className="t-blue">{fmt(view.email)}</b> have an email</span>}
+                  {(!heatMode || sectorHeat) && <span><b className="t-blue">{fmt(view.email)}</b> have an email</span>}
                   <span><b className="t-pink">{fmt(view.fourth[0])}</b> {view.fourth[1]}</span>
                 </div>
               </div>
@@ -415,10 +472,10 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
 
             {ranking.length > 0 && (
               <section className="hud-panel">
-                <h3 className="hud-h">{source === "trades" ? "Trades here" : "Kinds here"}</h3>
+                <h3 className="hud-h">{source === "trades" ? "Trades here" : sectorHeat ? (chosenIndustry ? "Niches" : chosen ? "Industries" : "Sectors") : "Kinds here"}</h3>
                 <ol className="hud-rank">
                   {ranking.slice(0, 6).map((r, n) => (
-                    <li key={r.label}>
+                    <li key={r.label} className={r.pick ? "click" : ""} onClick={r.pick} title={r.pick ? `Narrow to ${r.label}` : undefined}>
                       <span className="n">{n + 1}</span>
                       <span className="l">{r.label}</span>
                       <span className="hud-track"><i style={{ width: `${(r.count / top) * 100}%` }} /></span>
