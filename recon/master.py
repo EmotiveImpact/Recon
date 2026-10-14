@@ -176,7 +176,7 @@ def _connect(out=None, work=""):
     db = duckdb.connect(path)
     db.execute("SET preserve_insertion_order=false")
     db.execute("SET enable_progress_bar=false")
-    db.execute("SET memory_limit='10GB'")
+    db.execute(f"SET memory_limit='{os.environ.get('RECON_MEMORY', '6GB')}'")  # RECON_MEMORY lowers it.
     db.execute("SET threads=2")  # Fewer threads, less memory held at once.
     if out:  # Big joins spill to disk next to the database.
         temp = os.path.join(out, ".duckdb-temp")
@@ -334,11 +334,33 @@ def _nation_sql(postcode):
 SPLIT_BYTES = 200 * 1024 * 1024
 
 
+def split(db, path, size=SPLIT_BYTES):
+    """Also write a big parquet file as <name>/part-N.parquet, each under about
+    200 MB. The shared folder never passes on files over about 500 MB (they
+    stay stuck waiting to upload), so only the parts are published there."""
+    pieces = os.path.getsize(path) // size + 1
+    folder = path[:-len(".parquet")]
+    shutil.rmtree(folder, ignore_errors=True)
+    if pieces == 1:
+        return []
+    os.makedirs(folder)
+    written = []
+    for piece in range(pieces):
+        written.append(os.path.join(folder, f"part-{piece}.parquet"))
+        db.execute(f"COPY (SELECT * EXCLUDE (file_row_number) FROM "
+                   f"read_parquet('{path}', file_row_number=true) "
+                   f"WHERE file_row_number % {pieces} = {piece}) TO '{written[-1]}' "
+                   "(FORMAT parquet, COMPRESSION zstd)")
+    return written
+
+
 def segment(out):
     """Split the organisations by country: <out>/uk/<nation>.parquet and
     <out>/us/<state>.parquet, plus a counts file for each country."""
     db = _connect(out, work="segment")
     organisations = os.path.join(out, "organisations.parquet")
+    for whole in ("master.parquet", "organisations.parquet"):
+        split(db, os.path.join(out, whole))
     parts = {
         "uk": ("country = 'GB'", _nation_sql("postcode")),
         "us": ("country = 'US'", "CASE WHEN regexp_matches(upper(trim(region)), '^[A-Z]{2}$') "
@@ -354,19 +376,7 @@ def segment(out):
             target = os.path.join(path, f"{safe_name(name) or 'unknown'}.parquet")
             db.execute(f"COPY (SELECT * EXCLUDE (area) FROM part WHERE area = ?) TO '{target}' "
                        "(FORMAT parquet, COMPRESSION zstd)", [name])
-            # Big areas are also written as <area>/part-N.parquet, each under
-            # about 200 MB, because the shared folder is slow to pass very
-            # large files to other workspaces.
-            pieces = os.path.getsize(target) // SPLIT_BYTES + 1
-            if pieces > 1:
-                folder_path = target[:-len(".parquet")]
-                shutil.rmtree(folder_path, ignore_errors=True)
-                os.makedirs(folder_path)
-                for piece in range(pieces):
-                    db.execute(f"COPY (SELECT * EXCLUDE (area) FROM part WHERE area = ? "
-                               f"AND hash(group_id) % {pieces} = {piece}) TO "
-                               f"'{os.path.join(folder_path, f'part-{piece}.parquet')}' "
-                               "(FORMAT parquet, COMPRESSION zstd)", [name])
+            split(db, target)
         db.execute(f"""COPY (
             SELECT area, count(*) AS organisations,
                    count(*) FILTER (WHERE emails <> '') AS with_email,

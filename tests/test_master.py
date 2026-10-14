@@ -401,6 +401,22 @@ class BuildTests(unittest.TestCase):
             rows = db.execute(f"SELECT name, people FROM '{out}/organisations.parquet'").fetchall()
         self.assertEqual(rows, [("Pipe Ltd", "Jo Pipe (owner)")])
 
+    def test_big_files_are_also_written_in_parts(self):
+        import duckdb
+        with tempfile.TemporaryDirectory() as out:
+            path = os.path.join(out, "england.parquet")
+            db = duckdb.connect()
+            db.execute(f"COPY (SELECT range AS n, md5(range::VARCHAR) AS name FROM range(5000)) "
+                       f"TO '{path}' (FORMAT parquet)")
+            parts = master.split(db, path, size=os.path.getsize(path) // 3)
+            self.assertGreater(len(parts), 2)
+            self.assertTrue(all(p.startswith(os.path.join(out, "england", "part-")) for p in parts))
+            rows = db.execute(f"SELECT count(*), count(DISTINCT n) FROM "
+                              f"'{os.path.join(out, 'england', '*.parquet')}'").fetchone()
+            self.assertEqual(rows, (5000, 5000))
+            self.assertEqual(master.split(db, path), [])
+            self.assertFalse(os.path.exists(os.path.join(out, "england")))
+
 
 if __name__ == "__main__":
     unittest.main()

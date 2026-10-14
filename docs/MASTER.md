@@ -28,7 +28,7 @@ The organisations are also split by country, so each can be opened on its own:
 - `uk/england.parquet`, `uk/scotland.parquet`, `uk/wales.parquet`, `uk/northern-ireland.parquet` (by postcode area; the few areas that straddle the Welsh border count as England), and `uk/unknown.parquet` for rows without a postcode.
 - `us/<state>.parquet`, such as `us/ct.parquet`, from the state in the address.
 - `other/<country>.parquet` for the few registered abroad.
-Each folder has a `counts.csv` with the numbers per nation or state. An area whose file is over about 200 MB (England, California) is also written as `<area>/part-N.parquet`, because the shared folder is slow to pass very large files to other workspaces.
+Each folder has a `counts.csv` with the numbers per nation or state. Any table over about 200 MB (England, California, and the whole `master.parquet` and `organisations.parquet`) is also written as `<name>/part-N.parquet`. The shared project folder never passes on a file over about 500 MB (it stays stuck waiting to upload, held in memory), so only the parts of those tables are published there; read them with `read_parquet('<name>/*.parquet')`.
 
 ## Who may be emailed
 

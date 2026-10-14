@@ -54,6 +54,7 @@ Edem then asked for it to live in its own repository and to serve **all** his pr
 | Standard library only, apart from DuckDB for Overture | Easy to run anywhere, nothing to break. |
 | Keep it in-house, not a product for sale (for now) | Apollo, Cognism, Hunter, Outscraper and Clay already sell this. Prove it on SALEANE first; a sector-specific version (for example, helping beauty suppliers find studios) could be looked at later with evidence. |
 | Recon finds people; it does not send | Sending needs a separate domain, a suppression list and an unsubscribe flow. That is a deliberate next stage, see NEXT.md. |
+| Publish big master tables only in parts of about 200 MB (14 October 2026) | The shared project folder never passed on any file over about 500 MB: `master.parquet` (5.5 GB), `organisations.parquet`, `uk/england.parquet` (568 MB) and three big source files sat "waiting to upload" for over an hour, held in the workspace's memory (13 GB of 15), until a rebuild ran out of memory. Files up to about 150 MB went through. So every table over 200 MB is also written as `<name>/part-N.parquet` and only the parts are published. `RECON_MEMORY` lowers DuckDB's memory cap when the workspace is short. |
 | The repository is public, the data never is | `.gitignore` blocks `data/`, `out/` and every CSV, zip and parquet file. |
 
 ## Open-source projects we learn from
