@@ -298,7 +298,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
     if (sectorHeat && tree) {
       if (chosenIndustry) return chosenIndustry.niches.map((n) => ({ label: n.name, count: n.count, pick: chosenNiche ? undefined : () => setNiche(n.niche) }));
       if (chosen) return chosen.industries.map((i) => ({ label: i.name, count: i.count, pick: () => pickIndustry(i.industry) }));
-      return tree.sectors.map((s) => ({ label: s.name, count: s.count, pick: () => pickSector(s.sector) }));
+      return [...tree.sectors].sort((a, b) => b.count - a.count).map((s) => ({ label: s.name, count: s.count, pick: () => pickSector(s.sector) }));
     }
     if (source === "trades" && trade?.available) return trade.by_trade.map((t) => ({ label: t.name, count: t.count }));
     const counts = new Map<string, number>();
