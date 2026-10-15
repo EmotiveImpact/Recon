@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Database, Download, ExternalLink, Globe, Mail, Map as MapIcon, MapPin, Navigation, Phone, Search, User, X } from "lucide-react";
 import { api, type MasterResults, type MasterStatus, type Row } from "../api";
 import { fmt, pct, RuleBadge, splitList } from "../ui";
-import ResultsMap from "./ResultsMap";
 
 // Ready-made searches. Commas mean "or"; words are matched on their stem,
 // so "plumbers" also finds "plumbing".
@@ -134,12 +133,12 @@ function Details({ row, group, onClose }: { row: Row; group: string; onClose: ()
   );
 }
 
-export default function Find() {
+export default function Find({ initial }: { initial?: URLSearchParams }) {
   const [status, setStatus] = useState<MasterStatus | null>(null);
-  const [group, setGroup] = useState("uk");
-  const [area, setArea] = useState("");
-  const [typed, setTyped] = useState("plumbers");
-  const [q, setQ] = useState("plumbers");
+  const [group, setGroup] = useState(initial?.get("group") || "uk");
+  const [area, setArea] = useState(initial?.get("area") || "");
+  const [typed, setTyped] = useState(initial?.get("q") ?? "plumbers");
+  const [q, setQ] = useState(initial?.get("q") ?? "plumbers");
   const [rule, setRule] = useState("");
   const [has, setHas] = useState<string[]>([]);
   const [kind, setKind] = useState("");
@@ -148,8 +147,6 @@ export default function Find() {
   const [nearTyped, setNearTyped] = useState("");
   const [near, setNear] = useState("");
   const [radius, setRadius] = useState("5");
-  const [mapData, setMapData] = useState<MasterResults | null>(null);
-  const [showMap, setShowMap] = useState(true);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<MasterResults | null>(null);
   const [busy, setBusy] = useState(false);
@@ -161,7 +158,6 @@ export default function Find() {
     api.master().then(setStatus, (e) => setError(e.message));
   }, []);
   useEffect(() => {
-    setArea("");
     setNear("");
     setNearTyped("");
     setKind("");
@@ -192,7 +188,6 @@ export default function Find() {
     api.masterSearch(p).then(
       (d) => {
         setData(d);
-        if (d.page === 1) setMapData(d); // The map only comes with the first page.
         setError("");
         setBusy(false);
       },
@@ -239,7 +234,7 @@ export default function Find() {
             <Search size={20} />
             <input className="input" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="What kind of business? For example plumbers, or dental, dentist" />
           </div>
-          <select className="input select" value={group} onChange={(e) => setGroup(e.target.value)}>
+          <select className="input select" value={group} onChange={(e) => { setGroup(e.target.value); setArea(""); }}>
             {COUNTRIES.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
           </select>
           <select className="input select" value={area} onChange={(e) => setArea(e.target.value)}>
@@ -309,26 +304,18 @@ export default function Find() {
             <div className="stat"><b>{fmt(data.with_website)}</b><span>have a website</span></div>
           </div>
 
-          {mapped && mapData && (
-            <div className="card stack" style={{ marginBottom: 18 }}>
-              <div className="spread">
-                <div>
-                  <h3>
-                    {mapData.circle ? `Within ${mapData.circle.miles} ${mapData.circle.miles === 1 ? "mile" : "miles"} of ${mapData.circle.label}` : "On the map"}
-                  </h3>
-                  <p className="small muted">
-                    {mapData.placed > mapData.points.length
-                      ? `Showing the best ${fmt(mapData.points.length)} of ${fmt(mapData.placed)}, those you may email first. Pick a postcode or town above to see every one nearby.`
-                      : `${fmt(mapData.placed)} of ${fmt(mapData.total)} have a postcode we can place.`}
-                    {" "}Each pin sits at the middle of the postcode. Click one for the phone, email and website.
-                  </p>
-                </div>
-                <button className="btn ghost small" onClick={() => setShowMap(!showMap)}>
-                  <MapIcon size={14} /> {showMap ? "Hide" : "Show"} the map
-                </button>
-              </div>
-              {showMap && <ResultsMap data={mapData} group={group} onOpen={setOpen} />}
-            </div>
+          {mapped && data.placed > 0 && (
+            <a className="card map-link" style={{ marginBottom: 18 }}
+              href={`#/map?source=all&group=${group}&q=${encodeURIComponent(q)}${area && !near ? `&area=${area}` : ""}${near ? `&near=${encodeURIComponent(near)}&miles=${radius}` : ""}`}>
+              <span className="quick-icon teal"><MapIcon size={18} /></span>
+              <span>
+                <b>See {data.circle ? `these ${fmt(data.total)}` : `${fmt(data.placed)} of them`} on the map</b>
+                <span className="small muted" style={{ display: "block" }}>
+                  {data.circle ? `Within ${data.circle.miles} ${data.circle.miles === 1 ? "mile" : "miles"} of ${data.circle.label}. ` : ""}
+                  Pins, the list beside them, and a download of the area.
+                </span>
+              </span>
+            </a>
           )}
 
           <div className="two-up" style={{ marginBottom: 18 }}>

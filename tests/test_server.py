@@ -9,11 +9,12 @@ import shutil
 import tempfile
 import threading
 import unittest
+from unittest import mock
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
 
-from recon import directory, places, server
+from recon import dashboard, directory, places, server
 
 HERE = os.path.dirname(__file__)
 
@@ -261,6 +262,134 @@ class DirectoryTests(unittest.TestCase):
             exported = list(csv.DictReader(handle))
         self.assertEqual([r["name"] for r in exported], ["BRISTOL PLUMBING LTD"])
         self.assertEqual(exported[0]["lat"], "51.4545")
+
+
+
+class AreaFileTests(unittest.TestCase):
+    def test_big_areas_come_as_a_folder_of_parts(self):
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder)
+        os.makedirs(os.path.join(folder, "uk", "england"))
+        for name in ("uk/wales.parquet", "uk/england.parquet", "uk/england/part-0.parquet",
+                     "uk/england/part-1.parquet"):
+            open(os.path.join(folder, name), "w").close()
+        found = directory.Directory(folder)
+        self.assertEqual(found.areas("uk"), ["england", "wales"])
+        self.assertEqual([os.path.relpath(p, folder) for p in found.files("uk", "england")],
+                         ["uk/england/part-0.parquet", "uk/england/part-1.parquet"])
+        self.assertEqual(len(found.files("uk")), 3)  # The parts win over the single file.
+        self.assertEqual(directory.area_of("/x/uk/england/part-1.parquet"), "england")
+        self.assertEqual(directory.area_of("/x/uk/wales.parquet"), "wales")
+
+
+class DashboardTests(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.folder, "uk"))
+        os.makedirs(os.path.join(self.folder, "trades"))
+        with open(os.path.join(self.folder, "uk", "counts.csv"), "w", encoding="utf-8") as handle:
+            handle.write("area,organisations,with_email,may_email,with_phone,with_website\n"
+                         "england,100,40,10,60,50\nwales,20,5,1,9,8\n")
+        with open(os.path.join(self.folder, "trades", "summary.csv"), "w", encoding="utf-8") as handle:
+            handle.write("trade,businesses,with email,may email\nbuilders,3,2,1\ntotal,3,2,1\n")
+        rows = [
+            # name, postcode, town, lat, lon, email, rule, turnover band
+            ("Brighton Build", "BN1 1AA", "Brighton", "50.8225", "-0.1372", "a@b.co.uk", "can email", "yes", "small"),
+            ("Hove Homes", "BN3 2AB", "Hove", "50.8279", "-0.1680", "", "post only", "", "micro"),
+            ("Worthing Works", "BN11 1AA", "Worthing", "50.8179", "-0.3729", "c@d.co.uk", "post only", "", ""),
+        ]
+        with open(os.path.join(self.folder, "trades", "builders.csv"), "w", newline="",
+                  encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["name", "postcode", "town", "lat", "lon", "email", "contact_rule",
+                             "publishes_turnover", "size_band"])
+            writer.writerows(rows)
+        self.dash = dashboard.Dashboard(self.folder)
+
+    def test_overview_adds_up_the_counts(self):
+        view = self.dash.overview()
+        self.assertEqual(view["countries"]["uk"]["totals"]["organisations"], 120)
+        self.assertEqual([t["trade"] for t in view["trades"]], ["builders"])
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_heat_map_counts_each_postcode_district(self):
+        heat = self.dash.heat({})
+        districts = {d["district"]: d for d in heat["districts"]}
+        self.assertEqual(set(districts), {"BN1", "BN3", "BN11"})
+        self.assertEqual(districts["BN1"]["may_email"], 1)
+        self.assertEqual(self.dash.heat({"rule": ["can email"]})["districts"][0]["district"], "BN1")
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_founded_year_comes_from_companies_house(self):
+        import duckdb
+        path = os.path.join(self.folder, "trades", "builders.csv")
+        with open(path, encoding="utf-8") as handle:
+            rows = list(csv.reader(handle))
+        rows[0].append("company_number")
+        rows[1].append("01234567")
+        for row in rows[2:]:
+            row.append("")
+        with open(path, "w", newline="", encoding="utf-8") as handle:
+            csv.writer(handle).writerows(rows)
+        os.makedirs(os.path.join(self.folder, "companies-house"))
+        out = os.path.join(self.folder, "companies-house", "companies-house-2026-10-01.parquet")
+        duckdb.sql(f"""COPY (SELECT '01234567' AS CompanyNumber, '15/03/2019' AS IncorporationDate)
+                       TO '{out}' (FORMAT parquet)""")
+        view = self.dash.places({"near": ["BN1"], "miles": ["50"]})
+        self.assertEqual(view["founded"], [{"year": 2019, "count": 1}])
+        self.assertEqual(view["by_district"][0]["district"], "BN1")
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_new_companies_each_month_and_the_last_30_days(self):
+        import datetime
+        import duckdb
+        end = datetime.date.today()
+        days = [end, end - datetime.timedelta(days=5), end - datetime.timedelta(days=40),
+                end - datetime.timedelta(days=4000)]  # The last one is too old to count.
+        os.makedirs(os.path.join(self.folder, "companies-house"))
+        out = os.path.join(self.folder, "companies-house", "companies-house-2026-10-01.parquet")
+        values = ", ".join(f"('{n}', '{d.strftime('%d/%m/%Y')}')" for n, d in enumerate(days))
+        duckdb.sql(f"""COPY (SELECT * FROM (VALUES {values}) t(CompanyNumber, IncorporationDate))
+                       TO '{out}' (FORMAT parquet)""")
+        growth = self.dash.growth()
+        self.assertEqual((growth["last_30"], growth["prior_30"]), (2, 1))
+        self.assertEqual(sum(m["count"] for m in growth["months"]), 3 if end.day > 1 else 2)
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_keeps_the_lists_when_the_shared_folder_blinks(self):
+        self.assertEqual(self.dash.places({"near": ["BN1"], "miles": ["50"]})["total"], 3)
+        with mock.patch.object(self.dash, "trade_files", return_value={}):
+            self.assertEqual(self.dash.places({"near": ["BN1"], "miles": ["50"]})["total"], 3)
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_postcode_district_does_not_catch_its_longer_neighbours(self):
+        found = self.dash.places({"near": ["BN1"], "miles": ["1"]})
+        self.assertEqual(found["centre"]["matched"], "BN1")
+        self.assertEqual(found["total"], 1)  # Hove is 1.4 miles away; Worthing much further
+        self.assertEqual(self.dash.places({"near": ["BN1"], "miles": ["3"]})["total"], 2)
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_towns_filters_and_money(self):
+        found = self.dash.places({"near": ["Worthing"], "miles": ["30"], "has": ["email"]})
+        self.assertEqual(found["total"], 2)
+        self.assertEqual(found["points"][0]["name"], "Worthing Works")
+        money = self.dash.overview()["money"]
+        self.assertEqual((money["total"], money["publishes_turnover"]), (3, 1))
+        only = self.dash.places({"has": ["money"]})
+        self.assertEqual([p["name"] for p in only["points"]], ["Brighton Build"])
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_unknown_places_and_trades_are_refused(self):
+        with self.assertRaises(LookupError):
+            self.dash.places({"near": ["Nowhere-on-sea"]})
+        with self.assertRaises(ValueError):
+            self.dash.places({"trade": ["../etc"]})
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_places_the_lists_dont_know_are_asked_elsewhere(self):
+        dash = dashboard.Dashboard(self.folder, locate=lambda place: (50.8225, -0.1372, "Kemptown"))
+        found = dash.places({"near": ["Kemptown"], "miles": ["1"]})
+        self.assertEqual((found["centre"]["label"], found["total"]), ("Kemptown", 1))
 
 
 if __name__ == "__main__":

@@ -100,6 +100,80 @@ export type MasterResults = {
   points: Row[];
 };
 
+export type AreaCounts = { area: string; organisations: number; with_email: number; may_email: number; with_phone: number; with_website: number };
+export type CountryCounts = { totals: Partial<Omit<AreaCounts, "area">>; areas: AreaCounts[] };
+export type Money = {
+  available: boolean;
+  total?: number;
+  registered?: number;
+  publishes_turnover?: number;
+  with_net_assets?: number;
+  with_staff?: number;
+  size_bands?: { band: string; count: number }[];
+  account_types?: { type: string; count: number }[];
+};
+export type TradeSummary = Record<string, number> & { trade: string };
+
+export type Overview = {
+  available: boolean;
+  countries?: Record<string, CountryCounts>;
+  sources?: { name: string; title: string; country: string; licence: string; url: string; records: number; with_email: number }[];
+  trades?: TradeSummary[];
+  money?: Money;
+};
+
+// New UK companies each month, and the last 30 days against the 30 before.
+export type Growth = {
+  available: boolean;
+  as_of?: string;
+  last_30?: number;
+  prior_30?: number;
+  months?: { month: string; count: number }[];
+};
+
+export type Place = Record<string, string> & { lat: number; lon: number; miles?: number };
+
+export type MapResults = {
+  available: boolean;
+  centre: { lat: number; lon: number; label: string; matched: string } | null;
+  miles: number;
+  total: number;
+  with_email: number;
+  may_email: number;
+  with_phone: number;
+  with_mobile: number;
+  with_website: number;
+  by_trade: { trade: string; name: string; count: number }[];
+  by_district: { district: string; count: number; may_email: number }[];
+  founded?: { year: number; count: number }[];
+  trades?: { trade: string; name: string }[];
+  money: Money;
+  shown: number;
+  points: Place[];
+};
+
+// Every organisation sorted into sectors, then industries, then niches.
+export type Niche = { niche: string; name: string; count: number };
+export type Industry = { industry: string; name: string; count: number; niches: Niche[] };
+export type SectorNode = { sector: string; name: string; count: number; may_email: number; industries: Industry[] };
+export type SectorTree = { available: boolean; total: number; sectors: SectorNode[] };
+
+export type Heat = {
+  available: boolean;
+  founded: { year: number; count: number }[];
+  trades: { trade: string; name: string }[];
+  districts: { district: string; lat: number; lon: number; count: number; may_email: number; with_email?: number; with_phone?: number }[];
+};
+
+// Ask Recon: a plain question answered from the sector index.
+export type Answer = {
+  answer: string;
+  figures?: { total: number; may_email: number; with_email: number; with_phone: number };
+  districts?: Heat["districts"];
+  map?: Record<string, string[]>;
+  understood: { sector?: string | null; niche?: string | null; place?: string | null; miles?: number | null; rule?: string | null; has?: string[] };
+};
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const response = await fetch("/api/" + path, {
     method,
@@ -133,6 +207,14 @@ export const api = {
   masterSearch: (query: URLSearchParams) => call<MasterResults>("GET", `master/search?${query}`),
   masterKinds: (group: string) => call<{ kind: string; count: number }[]>("GET", `master/kinds?group=${group}`),
   masterExportUrl: (query: URLSearchParams) => `/api/master/export?${query}`,
+  overview: () => call<Overview>("GET", "overview"),
+  growth: () => call<Growth>("GET", "overview/growth"),
+  map: (query: URLSearchParams) => call<MapResults>("GET", `map?${query}`),
+  heat: (query: URLSearchParams) => call<Heat>("GET", `map/heat?${query}`),
+  sectors: (group: string) => call<SectorTree>("GET", `sectors?group=${group}`),
+  sectorHeat: (query: URLSearchParams) => call<Heat>("GET", `sectors/heat?${query}`),
+  ask: (text: string) => call<Answer>("POST", "ask", { text }),
+  mapExportUrl: (query: URLSearchParams) => `/api/map/export?${query}`,
   categories: (country: string, words: string[]) =>
     call<{ category: string; places: number }[]>("POST", "categories", { country, words }),
 };
