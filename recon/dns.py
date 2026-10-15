@@ -170,3 +170,13 @@ class Cache:
             self.known[domain] = mx_hosts(domain, self.servers)
         return self.known[domain]
 
+    def prefill(self, domains, workers=32):
+        """Look up many domains at once. One at a time, 40,000 addresses took
+        over two hours; most of that was waiting on the network."""
+        from concurrent.futures import ThreadPoolExecutor
+        wanted = sorted({d.lower() for d in domains if d} - set(self.known))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for domain, answer in zip(wanted, pool.map(
+                    lambda d: mx_hosts(d, self.servers), wanted)):
+                self.known[domain] = answer
+

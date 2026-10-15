@@ -133,12 +133,36 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(rules.contact_rule(places.blank(), "FR"), rules.CHECK)
 
 
+class DnsCacheTests(unittest.TestCase):
+    def test_prefill_looks_up_each_domain_once(self):
+        from unittest import mock
+        from recon import dns
+        asked = []
+        with mock.patch.object(dns, "mx_hosts", side_effect=lambda d, s=None: asked.append(d) or
+                               (dns.YES, ["mx." + d])):
+            cache = dns.Cache()
+            cache.prefill(["Glow.co.uk", "glow.co.uk", "", "pipe.co.uk"])
+            self.assertEqual(cache("glow.co.uk"), (dns.YES, ["mx.glow.co.uk"]))
+        self.assertEqual(sorted(asked), ["glow.co.uk", "pipe.co.uk"])
+
+
 class EmailParsingTests(unittest.TestCase):
     def test_junk_is_dropped(self):
         page = ('<img src="logo@2x.png"> info&#64;glowroom.co.uk '
                 'abc123@sentry.wixpress.com you@example.com Hello@GlowRoom.co.uk')
         self.assertEqual(emails.clean_candidates(page),
                          ["info@glowroom.co.uk", "hello@glowroom.co.uk"])
+
+    def test_long_runs_of_letters_are_quick(self):
+        # Inline images and minified scripts hold long runs of letters with no
+        # address in them; reading such a page must not take hours.
+        import time
+        page = ("data:image/png;base64," + "QUJD" * 250_000 + " info@glowroom.co.uk "
+                + "a." * 100_000 + " jo (at) glowroom (dot) co (dot) uk")
+        started = time.monotonic()
+        found = emails.clean_candidates(page)
+        self.assertLess(time.monotonic() - started, 5)
+        self.assertEqual(found, ["info@glowroom.co.uk", "jo@glowroom.co.uk"])
 
     def test_own_domain_and_shared_inbox_preferred(self):
         found = ["jane.smith@gmail.com", "jane@glowroom.co.uk", "info@glowroom.co.uk"]

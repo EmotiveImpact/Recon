@@ -24,7 +24,10 @@ MAX_BYTES = 1_000_000
 MAX_EXTRA_PAGES = 3
 TIMEOUT = 12
 
-_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}")
+# Runs are bounded (a local part is at most 64 characters, a domain 253) so a
+# page holding a long run of letters, such as an inline image, is read in
+# moments rather than hours.
+_EMAIL = re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,24}")
 _JSON_LD = re.compile(r"""<script[^>]+type\s*=\s*["']application/ld\+json["'][^>]*>(.*?)</script>""",
                       re.I | re.S)
 _MICRODATA = re.compile(
@@ -40,8 +43,8 @@ _FALLBACK_PAGES = ("/contact", "/contact-us")
 # Addresses hidden from robots: Cloudflare's scrambled ones, and "info [at] x [dot] com".
 _CLOUDFLARE = re.compile(r"""(?:data-cfemail=["']|/cdn-cgi/l/email-protection#)([0-9a-fA-F]{6,})""")
 _SPELT_OUT = re.compile(
-    r"([A-Za-z0-9._%+-]+)\s*[\[({]\s*at\s*[\])}]\s*"
-    r"([A-Za-z0-9-]+(?:\s*(?:[\[({]\s*dot\s*[\])}]|\.)\s*[A-Za-z0-9-]+)+)", re.I)
+    r"(?<![A-Za-z0-9._%+-])([A-Za-z0-9._%+-]{1,64})\s*[\[({]\s*at\s*[\])}]\s*"
+    r"([A-Za-z0-9-]{1,63}(?:\s*(?:[\[({]\s*dot\s*[\])}]|\.)\s*[A-Za-z0-9-]{1,63}){1,8})", re.I)
 _SPELT_DOT = re.compile(r"\s*(?:[\[({]\s*dot\s*[\])}]|\.)\s*", re.I)
 _JUNK_DOMAINS = (
     "example.com", "domain.com", "email.com", "yourdomain", "sentry.io", "wixpress.com",
@@ -103,7 +106,7 @@ def clean_candidates(page):
             continue
         if any(junk in email.split("@")[1] for junk in _JUNK_DOMAINS):
             continue
-        if not contacts.valid_email(email):
+        if not contacts.valid_email(email) or contacts.system_email(email):
             continue
         if email not in found:
             found.append(email)
