@@ -27,8 +27,8 @@ const ALL_FILTERS: [string, string, typeof Mail][] = [
 ];
 const SIZES: [string, string][] = [["", "Any size"], ["micro", "Micro"], ["small", "Small"], ["medium-large", "Medium or large"]];
 const WORTH: [string, string][] = [["", "Any worth"], ["10000", "£10k+"], ["100000", "£100k+"], ["1000000", "£1m+"]];
-const GREEN = "#7fd1ae";
-const AMBER = "#7d8291";
+const GREEN = "#2dd4bf";
+const AMBER = "#a78bfa";
 
 // One business on the map, whichever list it came from.
 type Item = {
@@ -52,7 +52,7 @@ const link = (site: string) => (/^https?:\/\//i.test(site) ? site : `https://${s
 const shade = (share: number) => {
   const t = Math.max(0, Math.min(1, share / 0.3));
   const mix = (a: number, b: number) => Math.round(a + (b - a) * t);
-  return `rgb(${mix(78, 214)}, ${mix(83, 218)}, ${mix(96, 226)})`;
+  return `rgb(${mix(124, 45)}, ${mix(92, 212)}, ${mix(255, 191)})`;
 };
 const pinColour = (i: Item) => (i.rule === "can email" ? GREEN : AMBER);
 const distance = (m: number | null) => (m === null ? "" : `${m < 10 ? m.toFixed(1) : Math.round(m)} mi`);
@@ -251,7 +251,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
       for (const d of heat.districts) {
         L.circleMarker([d.lat, d.lon], {
           radius: 2 + Math.sqrt(d.count / top) * 9, stroke: false,
-          fillColor: shade(d.count ? d.may_email / d.count : 0), fillOpacity: 0.38,
+          fillColor: shade(d.count ? d.may_email / d.count : 0), fillOpacity: 0.6,
         })
           .bindTooltip(`<b>${d.district}</b><br>${fmt(d.count)} businesses, ${fmt(d.may_email)} can email`, { direction: "top", className: "heat-tip" })
           .on("click", () => goTo(d.district))
@@ -262,7 +262,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
     }
     if (view.centre) {
       L.circle([view.centre.lat, view.centre.lon], {
-        radius: radius * 1609.34, color: "#e5e7eb", weight: 1, dashArray: "4 6", fillColor: "#e5e7eb", fillOpacity: 0.03,
+        radius: radius * 1609.34, color: "#22d3ee", weight: 1.5, dashArray: "4 6", fillColor: "#22d3ee", fillOpacity: 0.05,
       }).addTo(group);
     }
     for (const i of view.items) {
@@ -576,7 +576,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
               <div className="hud-top">
                 {richest.map((i, n) => (
                   <button key={`${i.name}-${n}`} onClick={() => show(i)}>
-                    <span className="dot" style={{ background: n === 0 ? GREEN : n === 1 ? "#c9ccd6" : AMBER }} />
+                    <span className="dot" style={{ background: n === 0 ? GREEN : n === 1 ? "#22d3ee" : AMBER }} />
                     <span className="l"><b>{i.name}</b><span>{i.size || i.what}{i.staff ? `, ${i.staff} staff` : ""}</span></span>
                     <span className="v">{money(i.netAssets)}</span>
                   </button>
