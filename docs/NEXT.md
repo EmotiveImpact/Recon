@@ -42,6 +42,6 @@ One plan, combining the first real runs, the research into free data sources (th
 ## Measured and left for later
 
 - **People Data Labs' free company list** (2.4 GB, CC BY 4.0): fills a website for about 6% of businesses without one, right about 9 times in 10. Worth adding only with a check that the suggested site mentions the business.
-- **Common Crawl** for websites that fail: most failures are domains that no longer exist, which an archive cannot fix.
+- **Common Crawl** for websites that fail: most failures are domains that no longer exist, which an archive cannot fix. If added, never for emails: its terms forbid harvesting personal data, so only websites, phones and social links.
 
 Things decided against, so they are not reopened without a reason: scraping Google Maps, booking platforms or the search pages of professional registers (official bulk downloads are allowed, see THINKING.md); buying lists; leaked or breached data; selling Recon as a product before it has proved itself on SALEANE.
