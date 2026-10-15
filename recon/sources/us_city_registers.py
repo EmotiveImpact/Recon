@@ -37,7 +37,7 @@ SEATTLE_CORPORATE = {"Corporation", "LLC - Single Member", "LLC - Multi Member",
 def seattle_rows(cache):
     for row in socrata("data.seattle.gov", "wnbq-64tb", cache):
         name = row["business_legal_name"]
-        corp = row["ownership_type"] in SEATTLE_CORPORATE or corporate_name(name)
+        corp = row["ownership_type"] in SEATTLE_CORPORATE or corporate_name(name, "US")
         # Washington agencies may not release lists of individuals for
         # commercial use, so sole traders and the like are post only.
         can, why = rule("US", corp, CAN_SPAM if corp else

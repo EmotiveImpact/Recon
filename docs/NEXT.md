@@ -31,6 +31,9 @@ One plan, combining the first real runs, the research into free data sources (th
 12. **Phone screening** against the TPS and CTPS before any calling.
 13. **Sending**, kept separate from finding and only with Edem's go-ahead: a sender on its own domain, unsubscribe handling, the suppression list, and a record of what was sent to whom.
 
+19. **Rebuild the master database once** with the stricter UK company words and British-rules-first joining (`python -m recon.master`), then republish uk/ and rebuild the sector index. Until then the published copy has about 50,000 UK organisations wrongly marked "can email".
+20. **Trade market sizing**: the 15 trade lists are businesses visible on maps (8,537 electricians against about 55,800 companies registered as electrical installers), good for outreach but not for counting a market. Count markets from the sector index (Companies House trade codes), and add staff and turnover filters to the map.
+
 ## Measured and left for later
 
 - **People Data Labs' free company list** (2.4 GB, CC BY 4.0): fills a website for about 6% of businesses without one, right about 9 times in 10. Worth adding only with a check that the suggested site mentions the business.

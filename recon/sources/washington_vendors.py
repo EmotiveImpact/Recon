@@ -25,7 +25,7 @@ def rows(cache):
         if key in seen:  # One row per commodity code; keep the first.
             continue
         seen.add(key)
-        is_corp = corporate_name(row["company_name"]) or corporate_name(row["dba_name"])
+        is_corp = corporate_name(row["company_name"], "US") or corporate_name(row["dba_name"], "US")
         can, why = rule("US", is_corp, "incorporated business: CAN-SPAM allows business email"
                         if is_corp else "may be an individual: Washington bars marketing to lists of individuals")
         yield record(

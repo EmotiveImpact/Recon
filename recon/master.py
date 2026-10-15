@@ -297,8 +297,13 @@ def organisations(db, out, parts):
                    {_merge('emails')} AS emails, {_merge('phones')} AS phones,
                    {_merge('socials')} AS socials, {_merge('people')} AS people,
                    -- One register calling it a company is enough; it is the
-                   -- legal form, not the register, that decides.
-                   CASE WHEN bool_or(can_email = 'can email') THEN 'can email'
+                   -- legal form, not the register, that decides. When any
+                   -- record is British, British rules decide: a US listing of
+                   -- the same business (CAN-SPAM) must not make it emailable.
+                   CASE WHEN bool_or(country = 'GB')
+                        THEN CASE WHEN bool_or(can_email = 'can email' AND country = 'GB')
+                                  THEN 'can email' ELSE 'post only' END
+                        WHEN bool_or(can_email = 'can email') THEN 'can email'
                         ELSE first(can_email) END AS can_email,
                    string_agg(DISTINCT source, '; ' ORDER BY source) AS sources,
                    string_agg(record_id, '; ') AS record_ids,

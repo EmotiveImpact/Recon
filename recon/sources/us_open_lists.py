@@ -72,7 +72,7 @@ def _blank(value):
 
 
 def _wa_rule(*names):
-    is_corp = any(corporate_name(n) for n in names)
+    is_corp = any(corporate_name(n, "US") for n in names)
     return rule("US", is_corp, WA_CORP if is_corp else WA_PERSON), is_corp
 
 
@@ -99,7 +99,7 @@ def nyc_dob_rows(cache):
     for row in socrata("data.cityofnewyork.us", "t8hj-ruu2", cache, where="license_status='ACTIVE'"):
         person = joined(row["first_name"], row["last_name"], sep=" ").title()
         name = _blank(row["business_name"]) or person
-        corp = corporate_name(name)
+        corp = corporate_name(name, "US")
         can, why = rule("US", corp or None, CAN_SPAM if corp else PERSON_OK)
         kind = "contractor" if row["license_type"] in _FIRM_LICENCES or name != person else "tradesperson"
         yield record(
@@ -157,7 +157,7 @@ _TEXAS_KIND = {"General Residential Operation": "children's home",
 def texas_ccl_rows(cache):
     for row in socrata("data.texas.gov", "bc5r-88dy", cache, where="operation_status='Y'"):
         name = row["operation_name"]
-        corp = corporate_name(name)
+        corp = corporate_name(name, "US")
         home = "Home" in row["operation_type"]
         can, why = rule("US", corp or None, PERSON_OK if home and not corp else CAN_SPAM)
         yield record(
@@ -183,7 +183,7 @@ PA_CHILDCARE = _source(
 def pa_childcare_rows(cache):
     for row in socrata("data.pa.gov", "ajn5-kaxt", cache):
         name, legal = row["facility_name"], row["legal_entity_name"]
-        corp = corporate_name(name) or corporate_name(legal)
+        corp = corporate_name(name, "US") or corporate_name(legal, "US")
         home = "Home" in row["provider_type"]
         can, why = rule("US", corp or None, PERSON_OK if home and not corp else CAN_SPAM)
         person = joined(row["responsible_person_first"], row["responsible_person_last_name"], sep=" ").title()
@@ -291,7 +291,7 @@ def gainesville_rows(cache):
     where = "statusid='Active' AND business_type != 'REFERENCE OUT OF BUSINESS'"
     for row in socrata("data.cityofgainesville.org", "hk2b-em59", cache, where=where):
         owner = " ".join(row["owner"].split())
-        if corporate_name(owner) or owner.rstrip(".").lower() == row["name"].rstrip(".").lower():
+        if corporate_name(owner, "US") or owner.rstrip(".").lower() == row["name"].rstrip(".").lower():
             owner = ""  # Owned by the business itself, not a named person.
         same_place = row["mailing_address"] == row["physical_address"]
         can, why = rule("US", None, CAN_SPAM)
@@ -314,7 +314,7 @@ VERMONT_CHILDCARE = _source(
 def vermont_rows(cache):
     for row in socrata("data.vermont.gov", "ctdw-tmfz", cache):
         name = row["provider_name"]
-        corp = corporate_name(name)
+        corp = corporate_name(name, "US")
         home = "FCCH" in row["provider_program_type"]
         can, why = rule("US", corp or None, PERSON_OK if home and not corp else CAN_SPAM)
         yield record(
@@ -490,7 +490,7 @@ DE_SEPTIC = _source(
 def de_septic_rows(cache):
     for row in socrata("data.delaware.gov", "56uc-mvju", cache, where="licstatus='Approved'"):
         name = row["companyname"] or row["displayname"]
-        corp = corporate_name(name)
+        corp = corporate_name(name, "US")
         can, why = rule("US", corp or None, CAN_SPAM if corp else PERSON_OK)
         street, town, state, zipcode = _split(row["companyaddress"])
         yield record(
