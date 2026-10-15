@@ -6,8 +6,11 @@ decides who may be emailed, and phone numbers must be screened against the
 TPS and CTPS before anyone rings them (docs/RULES.md).
 """
 
+import json
 import os
 import re
+import time
+import urllib.request
 
 from . import patterns, text
 
@@ -41,26 +44,76 @@ PLACEHOLDERS = {"name", "your", "yourname", "you", "email", "user", "username", 
                 "firstname", "firstlast", "first.last", "firstname.lastname", "someone",
                 "johndoe", "john.doe", "jane.doe", "test"}
 # Throwaway mailboxes, which nobody reads for long. A short list of the most
-# common; put the full public list (the CC0 "disposable-email-domains"
-# project) in data/disposable_domains.txt to use all of it.
+# common; the full public list is downloaded to data/ (see fetch_lists).
 THROWAWAY = {"mailinator.com", "guerrillamail.com", "10minutemail.com", "tempmail.com",
              "temp-mail.org", "yopmail.com", "trashmail.com", "sharklasers.com",
              "getnada.com", "dispostable.com", "maildrop.cc", "throwawaymail.com",
              "fakeinbox.com", "mintemail.com", "mailnesia.com", "tempr.email"}
 _THROWAWAY_FILE = os.path.join("data", "disposable_domains.txt")
+_FREE_MAIL_FILE = os.path.join("data", "free_email_domains.txt")
+
+# Fuller public lists, downloaded when first needed and kept for a month:
+# throwaway domains from disposable-email-domains (CC0) and free mail
+# providers from Kiko Beats' free-email-domains (MIT, 32,000 domains such as
+# btconnect.com and talk21.com). Without them the short lists above are used.
+LIST_URLS = {
+    _THROWAWAY_FILE: "https://raw.githubusercontent.com/disposable-email-domains/"
+                     "disposable-email-domains/main/disposable_email_blocklist.conf",
+    _FREE_MAIL_FILE: "https://raw.githubusercontent.com/Kikobeats/free-email-domains/"
+                     "master/domains.json",
+}
+
+
+def fetch_lists(days=30):
+    """Download the public domain lists to data/ when missing or old."""
+    for path, url in LIST_URLS.items():
+        if os.path.exists(path) and time.time() - os.path.getmtime(path) < days * 86400:
+            continue
+        try:
+            request = urllib.request.Request(url, headers={"User-Agent": "Recon"})
+            with urllib.request.urlopen(request, timeout=60) as response:
+                body = response.read().decode("utf-8", "replace")
+            found = json.loads(body) if body.lstrip().startswith("[") else body.splitlines()
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path + ".part", "w", encoding="utf-8") as out:
+                out.write("\n".join(d.strip().lower() for d in found if d.strip()) + "\n")
+            os.replace(path + ".part", path)
+        except (OSError, ValueError) as error:
+            print(f"  Could not fetch {url} ({error}); using the short built-in list")
+
+
+def _domain_file(path):
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return {line.strip().lower() for line in handle
+                    if line.strip() and not line.startswith("#")}
+    except OSError:
+        return set()
 
 
 def _throwaway():
     if not hasattr(_throwaway, "domains"):
-        domains = set(THROWAWAY)
-        try:
-            with open(_THROWAWAY_FILE, encoding="utf-8") as handle:
-                domains |= {line.strip().lower() for line in handle
-                            if line.strip() and not line.startswith("#")}
-        except OSError:
-            pass
-        _throwaway.domains = domains
+        _throwaway.domains = THROWAWAY | _domain_file(_THROWAWAY_FILE)
     return _throwaway.domains
+
+
+def _free_mail():
+    if not hasattr(_free_mail, "domains"):
+        _free_mail.domains = FREE_MAIL | _domain_file(_FREE_MAIL_FILE)
+    return _free_mail.domains
+
+
+# Addresses that belong to website software rather than the business: error
+# reporting (Sentry), site builders' own systems, and do-not-reply senders.
+_SYSTEM_HOSTS = re.compile(r"(^|\.)sentry(\.io$|-)|(^|\.)(bugsnag|rollbar)\.(com|io)$|"
+                           r"wixpress\.com$|(^|\.)ingest\.")
+_SYSTEM_LOCAL = re.compile(r"^(no-?reply|do-?not-?reply|mailer-daemon|postmaster)$|^[0-9a-f]{32}$")
+
+
+def system_email(address):
+    """True for an address no person reads, such as an error-reporting key."""
+    local, _, host = (address or "").lower().partition("@")
+    return bool(_SYSTEM_HOSTS.search(host) or _SYSTEM_LOCAL.search(local))
 
 
 def valid_email(address):
@@ -86,7 +139,7 @@ def valid_email(address):
 
 def email_label(address, site=""):
     local, _, host = address.lower().partition("@")
-    if host in FREE_MAIL:
+    if host in _free_mail():
         return PERSONAL
     if patterns.is_role(local):
         return SHARED
