@@ -165,6 +165,15 @@ export type Heat = {
   districts: { district: string; lat: number; lon: number; count: number; may_email: number; with_email?: number; with_phone?: number }[];
 };
 
+// Ask Recon: a plain question answered from the sector index.
+export type Answer = {
+  answer: string;
+  figures?: { total: number; may_email: number; with_email: number; with_phone: number };
+  districts?: Heat["districts"];
+  map?: Record<string, string[]>;
+  understood: { sector?: string | null; niche?: string | null; place?: string | null; miles?: number | null; rule?: string | null; has?: string[] };
+};
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const response = await fetch("/api/" + path, {
     method,
@@ -204,6 +213,7 @@ export const api = {
   heat: (query: URLSearchParams) => call<Heat>("GET", `map/heat?${query}`),
   sectors: (group: string) => call<SectorTree>("GET", `sectors?group=${group}`),
   sectorHeat: (query: URLSearchParams) => call<Heat>("GET", `sectors/heat?${query}`),
+  ask: (text: string) => call<Answer>("POST", "ask", { text }),
   mapExportUrl: (query: URLSearchParams) => `/api/map/export?${query}`,
   categories: (country: string, words: string[]) =>
     call<{ category: string; places: number }[]>("POST", "categories", { country, words }),

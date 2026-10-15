@@ -28,7 +28,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import dashboard, directory, finder, places, sectors
+from . import ask, dashboard, directory, finder, places, sectors
 from .target import COUNTRY_BOX, Target
 
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
@@ -52,6 +52,8 @@ class Workspace:
             self.directory.folder, locate=lambda place: self.directory.locate("uk", place))
         # The sector tree's counts, from the index `python -m recon.sectors build` writes.
         self.sectors = sectors.Sectors(os.path.join(self.root, "data", "sectors"))
+        # Questions in plain words, answered from the sector index.
+        self.ask = ask.Ask(self.sectors, lambda place: self.directory.locate("uk", place))
         self.projects_dir = os.path.join(self.root, "projects")
         self.targets_dir = os.path.join(self.root, "targets")
         self._results = {}  # path -> (mtime, rows)
@@ -538,6 +540,8 @@ def handler_for(workspace, site):
                 return self._file(workspace.directory.export(query))
             if route == ("GET", "overview"):
                 return self._json(workspace.dashboard.overview())
+            if route == ("POST", "ask"):
+                return self._json(workspace.ask.answer(str(self._body().get("text", ""))[:300]))
             if route == ("GET", "overview", "growth"):
                 return self._json(workspace.dashboard.growth())
             if route == ("GET", "map"):

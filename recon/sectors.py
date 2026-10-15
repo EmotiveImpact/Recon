@@ -177,7 +177,7 @@ def clause(query, category="category", kind="kind"):
     the sector table, so they can sit in the SQL text."""
     slug = (query.get("sector") or [""])[0]
     industry = (query.get("industry") or [""])[0]
-    niche = (query.get("niche") or [""])[0]
+    niches = [n for n in query.get("niche", []) if n][:4]  # Several are taken as "any of".
     parts = []
     if slug:
         _, _, prefixes, words = sector_of(slug)
@@ -186,13 +186,16 @@ def clause(query, category="category", kind="kind"):
         if not CODE.match(industry) or len(industry) != 2:
             raise ValueError("Unknown industry")
         parts.append(_code_sql([industry], category)[0])
-    if niche:
+    either = []
+    for niche in niches:
         if CODE.match(niche) and len(niche) == 5:
-            parts.append(_code_sql([niche], category)[0])
+            either.append(_code_sql([niche], category)[0])
         elif WORDS.match(niche.lower()):
-            parts.append(_word_sql([niche.lower()], kind)[0])
+            either.append(_word_sql([niche.lower()], kind)[0])
         else:
             raise ValueError("Unknown niche")
+    if either:
+        parts.append("(" + " OR ".join(either) + ")")
     return " AND ".join(parts)
 
 
@@ -284,7 +287,7 @@ class Sectors:
         parts = []
         slug = (query.get("sector") or [""])[0]
         industry = (query.get("industry") or [""])[0]
-        niche = (query.get("niche") or [""])[0]
+        niches = [n for n in query.get("niche", []) if n][:4]  # Several are taken as "any of".
         if slug:
             _, _, prefixes, words = sector_of(slug)
             pattern = "^(" + "|".join(prefixes) + ")"
@@ -297,13 +300,16 @@ class Sectors:
             if not CODE.match(industry) or len(industry) != 2:
                 raise ValueError("Unknown industry")
             parts.append(f"len(list_filter(codes, c -> c[:2] = '{industry}')) > 0")
-        if niche:
+        either = []
+        for niche in niches:
             if CODE.match(niche) and len(niche) == 5:
-                parts.append(f"list_contains(codes, '{niche}')")
+                either.append(f"list_contains(codes, '{niche}')")
             elif WORDS.match(niche.lower()):
-                parts.append("list_contains(words, '" + niche.lower().replace("'", "''") + "')")
+                either.append("list_contains(words, '" + niche.lower().replace("'", "''") + "')")
             else:
                 raise ValueError("Unknown niche")
+        if either:
+            parts.append("(" + " OR ".join(either) + ")")
         rule = (query.get("rule") or [""])[0]
         if rule == "can email":
             parts.append("may")

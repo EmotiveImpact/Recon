@@ -585,3 +585,73 @@ td .name { font-weight: 600; }
 .overview .insights { grid-column: 1 / -1; }
 .insights ul { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); list-style: none; padding: 0; }
 .insights li { padding-left: 12px; border-left: 2px solid rgba(255, 255, 255, 0.12); }
+
+/* Shell after the X developer console Edem shared on 15 October 2026: a floating sidebar
+   card with grouped sections, and every page inside one rounded frame with a slim top bar. */
+body { background: #050608; }
+.shell { grid-template-columns: 236px minmax(0, 1fr); gap: 10px; padding: 10px; height: 100vh; min-height: 0; }
+.side { position: relative; top: auto; height: auto; min-height: 0; border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px; background: #0b0c10; backdrop-filter: none; padding: 18px 12px 12px; gap: 14px; overflow: hidden; }
+.side .nav { overflow-y: auto; min-height: 0; flex: 1; margin: 0 -4px; padding: 0 4px; }
+.nav-label { padding: 14px 10px 5px; font-size: 10.5px; color: #5d6274; }
+.nav-label:first-child { padding-top: 4px; }
+.nav a { padding: 7px 10px; font-size: 14px; border-radius: 8px; }
+.nav a.on { background: rgba(255, 255, 255, 0.07); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05); }
+.side-foot { margin-top: 0; padding: 12px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.025); font-size: 11.5px; line-height: 1.45; display: grid; gap: 3px; }
+.side-foot b { color: var(--muted); font-weight: 600; font-size: 12px; }
+.frame { min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px; background: #08090c; overflow: hidden; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 18px; height: 48px;
+  flex: none; border-bottom: 1px solid rgba(255, 255, 255, 0.06); font-size: 13.5px; }
+.topbar-title { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-title i { font-style: normal; color: #3d4150; margin: 0 6px; }
+.topbar-title b { color: var(--text); font-weight: 600; }
+.topbar-links { display: flex; gap: 4px; }
+.topbar-links a { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px; color: var(--muted); }
+.topbar-links a:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
+.frame .main { flex: 1; min-height: 0; overflow: auto; padding: 28px 34px 56px; }
+.frame .main.flush { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.frame .mapview { height: 100%; flex: 1; }
+
+/* Ask Recon */
+.ask { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ask-body { flex: 1; overflow: auto; padding: 28px 24px; }
+.ask-empty { max-width: 560px; margin: 9vh auto 0; text-align: center; display: grid; gap: 12px; justify-items: center; color: var(--muted); }
+.ask-empty svg { color: #c9ccd6; }
+.ask-empty h2 { color: var(--text); font-size: 22px; }
+.ask-examples { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 14px; }
+.ask-examples button { text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025); color: var(--text); cursor: pointer; font-size: 13.5px; }
+.ask-examples button:hover { background: rgba(255, 255, 255, 0.06); }
+.ask-turns { max-width: 720px; margin: 0 auto; display: grid; gap: 22px; }
+.ask-turn { display: grid; gap: 10px; }
+.ask-q { justify-self: end; max-width: 80%; padding: 9px 14px; border-radius: 14px 14px 4px 14px; background: rgba(255, 255, 255, 0.07); }
+.ask-a { display: grid; gap: 8px; justify-items: start; color: #d4d7e0; }
+.ask-a.bad { color: var(--red); }
+.ask-figures { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; width: 100%; margin: 4px 0;
+  border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 12px; overflow: hidden; background: rgba(255, 255, 255, 0.07); }
+.ask-figures div { background: #0b0c10; padding: 12px 14px; display: grid; gap: 2px; }
+.ask-figures b { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ask-figures span { font-size: 12px; color: var(--muted); }
+.ask-input { flex: none; display: flex; gap: 8px; max-width: 720px; width: calc(100% - 48px); margin: 0 auto 20px; padding: 6px 6px 6px 16px;
+  border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.1); background: #0e0f14; }
+.ask-input input { flex: 1; border: none; background: none; outline: none; font-size: 15px; min-width: 0; }
+.ask-input button { width: 36px; height: 36px; border-radius: 10px; border: none; background: #e8eaf0; color: #08090c;
+  display: grid; place-items: center; cursor: pointer; }
+.ask-input button:disabled { opacity: 0.35; cursor: default; }
+
+@media (max-width: 860px) {
+  .shell { height: auto; padding: 8px; gap: 8px; grid-template-columns: minmax(0, 1fr); }
+  .side { flex-direction: row; padding: 10px 12px; border-radius: 14px; }
+  .side .nav { flex-direction: row; overflow-x: auto; }
+  .side .nav .nav-label { display: none; }
+  .side-foot { display: none; }
+  .frame { border-radius: 14px; overflow: visible; }
+  .topbar-links { display: none; }
+  .frame .main { overflow: visible; padding: 18px 14px 44px; }
+  .frame .main.flush { overflow: visible; }
+  .frame .mapview { height: auto; }
+  .ask { min-height: 75vh; }
+  .ask-examples, .ask-figures { grid-template-columns: 1fr 1fr; }
+}
