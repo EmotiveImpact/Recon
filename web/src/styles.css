@@ -719,3 +719,83 @@ h3 { font-size: 14px; }
 .ask-figures b { font-size: 18px; }
 .ask-examples button { font-size: 13px; }
 .topbar { font-size: 13px; height: 46px; }
+
+/* Closer to the Developer Console page Edem shared (15 October 2026): a 240px sidebar with a
+   68px header, 32px links that mark the current page with a thin white bar instead of a fill,
+   sentence-case group headings under a hairline, an account row at the foot, and a 68px top bar
+   with text links, a divider and round icon buttons. */
+.shell { grid-template-columns: 240px minmax(0, 1fr); gap: 12px; padding: 12px; }
+.side { padding: 0; gap: 0; border-radius: 14px; background: #0c0d11; box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 30px rgba(0, 0, 0, 0.35); }
+.brand { height: 68px; flex: none; padding: 0 20px; gap: 10px; font-size: 14.5px; font-weight: 500; letter-spacing: -0.015em; }
+.brand img { width: 22px; height: 22px; border-radius: 6px; }
+.side .nav { padding: 4px 12px 12px; margin: 0; gap: 1px; }
+.nav a { position: relative; height: 32px; padding: 0 8px; gap: 8px; border-radius: 6px; font-size: 13px; font-weight: 400;
+  color: var(--muted); transition: background 0.15s, color 0.15s; }
+.nav a svg { color: var(--faint); transition: color 0.15s; }
+.nav a:hover { background: rgba(255, 255, 255, 0.04); color: var(--text); }
+.nav a:hover svg { color: var(--text); }
+.nav a.on { background: none; box-shadow: none; color: var(--text); font-weight: 500; }
+.nav a.on svg { color: var(--text); }
+.nav a.on::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: #eceef2; }
+.nav-group { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.06); display: flex; flex-direction: column; gap: 1px; }
+.nav-label, .nav-label:first-child { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; color: var(--faint); padding: 4px 8px 2px; }
+.side-foot { margin: 0 12px 12px; padding: 6px 0 0; border: none; border-top: 1px solid rgba(255, 255, 255, 0.06); border-radius: 0; background: none;
+  display: flex; align-items: center; gap: 8px; height: 40px; font-size: 13px; color: var(--muted); cursor: default; }
+.side-foot .avatar { width: 18px; height: 18px; border-radius: 50%; background: rgba(255, 255, 255, 0.1); color: var(--text); font-size: 8.5px;
+  font-weight: 600; display: grid; place-items: center; margin-left: 8px; }
+.side-foot-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-foot svg { color: var(--green); margin-right: 8px; }
+.frame { border-radius: 14px; background: #0a0b0e; box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 30px rgba(0, 0, 0, 0.35); }
+.topbar { height: 68px; padding: 0 28px; font-size: 13px; }
+.topbar-title { display: flex; align-items: center; gap: 2px; }
+.topbar-title a { padding: 4px 8px; border-radius: 6px; color: var(--muted); font-weight: 500; }
+.topbar-title a:hover { background: rgba(255, 255, 255, 0.04); color: var(--text); }
+.topbar-title i { margin: 0 2px; }
+.topbar-title b { padding: 4px 8px; font-weight: 500; }
+.topbar-links { align-items: center; gap: 4px; }
+.topbar-links a.text { height: 32px; padding: 0 10px; gap: 3px; border-radius: 6px; font-size: 13px; }
+.topbar-links a.text svg { color: var(--faint); }
+.topbar-links a.round { width: 32px; height: 32px; padding: 0; border-radius: 50%; justify-content: center; color: var(--text); }
+.topbar-rule { width: 1px; height: 16px; margin: 0 4px; background: rgba(255, 255, 255, 0.08); }
+.topbar-chip { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; margin-left: 4px; border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06); color: var(--muted); font-weight: 500; }
+.frame .main { padding: 28px 28px 56px; }
+
+/* Ask Recon in the console's agent layout: the conversation, and a 256px side column. */
+.ask-wrap { flex: 1; min-height: 0; display: flex; }
+.ask-side { width: 256px; flex: none; border-left: 1px solid rgba(255, 255, 255, 0.06); padding: 12px; display: grid; align-content: start; gap: 16px; }
+.ask-new { width: 100%; justify-content: flex-start; height: 32px; padding: 0 12px; border-radius: 6px; background: #0c0d11; border-color: rgba(255, 255, 255, 0.1); }
+.ask-history { display: grid; gap: 2px; }
+.ask-history span { font-size: 13px; color: var(--muted); padding: 6px 8px; border-radius: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ask-empty { margin: 0 auto; height: 100%; align-content: center; gap: 4px; max-width: 520px; }
+.ask-body:has(.ask-empty) { display: grid; }
+.ask-empty svg { color: rgba(139, 144, 160, 0.55); margin-bottom: 6px; }
+.ask-empty h2 { font-size: 15px; font-weight: 500; color: #c9ccd6; }
+.ask-empty p { font-size: 13px; color: var(--faint); max-width: 42ch; text-wrap: balance; }
+.ask-examples { margin-top: 18px; }
+.ask-input { max-width: 768px; border-radius: 8px; padding: 8px 8px 8px 14px; background: #0c0d11; border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); margin-bottom: 16px; }
+.ask-input:focus-within { border-color: rgba(255, 255, 255, 0.16); }
+.ask-input input { font-size: 14.5px; }
+.ask-input button { width: 32px; height: 32px; border-radius: 50%; }
+.ask-input button:disabled { background: transparent; color: var(--faint); opacity: 1; }
+
+@media (max-width: 860px) {
+  .shell { padding: 8px; gap: 8px; }
+  .brand { height: auto; padding: 0; }
+  .brand span { display: none; }
+  .side { padding: 8px 10px; }
+  .side .nav { padding: 0; }
+  .nav-group { display: none; }
+  .nav a.on::before { display: none; }
+  .nav a.on { background: rgba(255, 255, 255, 0.07); }
+  .topbar { height: 52px; padding: 0 14px; }
+  .ask-side { display: none; }
+}
+.ask-side { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 860px) {
+  .shell { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .side { flex-direction: row; align-items: center; gap: 10px; }
+  .side .nav { flex-direction: row; overflow-x: auto; flex: 1; }
+  .side-foot { display: none; }
+}

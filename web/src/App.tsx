@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, FolderKanban, History, LayoutDashboard, Map as MapIcon, Plus, Search, Sparkles } from "lucide-react";
+import { ArrowUpRight, FolderKanban, History, LayoutDashboard, Map as MapIcon, Plus, Search, ShieldCheck, Sparkles } from "lucide-react";
 import { api, type Project } from "./api";
 import { Toaster, useRoute } from "./ui";
 import Projects from "./pages/Projects";
@@ -52,46 +52,54 @@ export default function App() {
       <aside className="side">
         <a className="brand" href="#/">
           <img src="/favicon.svg" alt="" />
-          <span>
-            Recon
-            <small>Outreach finder</small>
-          </span>
+          <span>Recon</span>
         </a>
         <nav className="nav">
-          <div className="nav-label">Find</div>
           {link("#/", !section, <LayoutDashboard size={16} />, "Dashboard")}
           {link("#/map", section === "map", <MapIcon size={16} />, "Map")}
           {link("#/find", section === "find", <Search size={16} />, "Find businesses")}
           {link("#/ask", section === "ask", <Sparkles size={16} />, "Ask Recon")}
-          <div className="nav-label">Work</div>
-          {link("#/projects", section === "projects", <FolderKanban size={16} />, "All projects")}
-          {link("#/runs", section === "runs", <History size={16} />, "Runs")}
-          <div className="nav-label">Projects</div>
-          {projects.map((p, i) => (
-            <a key={p.slug} href={`#/p/${p.slug}`} className={current === p.slug ? "on" : ""}>
-              <span className="dot" style={{ background: colourFor(i) }} /> {p.name}
+          <div className="nav-group">
+            <div className="nav-label">Work</div>
+            {link("#/projects", section === "projects", <FolderKanban size={16} />, "All projects")}
+            {link("#/runs", section === "runs", <History size={16} />, "Runs")}
+          </div>
+          <div className="nav-group">
+            <div className="nav-label">Projects</div>
+            {projects.map((p, i) => (
+              <a key={p.slug} href={`#/p/${p.slug}`} className={current === p.slug ? "on" : ""}>
+                <span className="dot" style={{ background: colourFor(i) }} /> {p.name}
+              </a>
+            ))}
+            <a href="#/projects?new=1">
+              <Plus size={16} /> New project
             </a>
-          ))}
-          <a href="#/projects?new=1">
-            <Plus size={16} /> New project
-          </a>
+          </div>
         </nav>
-        <div className="side-foot">
-          <b>Open data only</b>
-          Recon finds; it never sends. Overture Maps, OpenStreetMap, Companies House and 60 more open registers.
+        <div className="side-foot" title="Open data only. Recon finds; it never sends. Overture Maps, OpenStreetMap, Companies House and 60 more open registers.">
+          <span className="avatar">EI</span>
+          <span className="side-foot-name">Emotive Impact</span>
+          <ShieldCheck size={14} />
         </div>
       </aside>
       <div className="frame">
         <header className="topbar">
           <span className="topbar-title">
-            Recon <i>/</i> <b>{title}</b>
+            <a href="#/">Recon</a>
+            <i>/</i>
+            <b>{title}</b>
           </span>
           <span className="topbar-links">
-            <a href="#/ask"><Sparkles size={14} /> Ask</a>
-            <a href="#/find"><Search size={14} /> Search</a>
-            <a href="https://github.com/EmotiveImpact/Recon/tree/main/docs" target="_blank" rel="noreferrer">
-              <BookOpen size={14} /> Rules and notes
+            <a className="text" href="https://github.com/EmotiveImpact/Recon/blob/main/docs/RULES.md" target="_blank" rel="noreferrer">
+              Rules <ArrowUpRight size={13} />
             </a>
+            <a className="text" href="https://github.com/EmotiveImpact/Recon/tree/main/docs" target="_blank" rel="noreferrer">
+              Notes <ArrowUpRight size={13} />
+            </a>
+            <span className="topbar-rule" />
+            <a className="round" href="#/find" aria-label="Search" title="Find businesses"><Search size={16} /></a>
+            <a className="round" href="#/ask" aria-label="Ask Recon" title="Ask Recon"><Sparkles size={16} /></a>
+            <span className="topbar-chip">🇬🇧 UK</span>
           </span>
         </header>
         <main className={section === "map" || section === "ask" ? "main flush" : "main"}>

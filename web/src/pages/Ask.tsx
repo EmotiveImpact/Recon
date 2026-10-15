@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Map as MapIcon, Sparkles } from "lucide-react";
+import { ArrowUp, Map as MapIcon, MessageSquarePlus, Sparkles } from "lucide-react";
 import { api, type Answer } from "../api";
 import { fmt } from "../ui";
 
@@ -41,11 +41,12 @@ export default function Ask() {
   };
 
   return (
+    <div className="ask-wrap">
     <div className="ask">
       <div className="ask-body">
         {turns.length === 0 ? (
           <div className="ask-empty">
-            <Sparkles size={26} />
+            <Sparkles size={20} />
             <h2>Ask Recon</h2>
             <p>Ask about any kind of UK business in a town or postcode. Recon counts them, says how many you may email, and opens them on the map.</p>
             <div className="ask-examples">
@@ -87,9 +88,23 @@ export default function Ask() {
           autoFocus
         />
         <button type="submit" disabled={!text.trim() || busy} aria-label="Ask">
-          <ArrowUp size={17} />
+          <ArrowUp size={16} />
         </button>
       </form>
+    </div>
+      <aside className="ask-side">
+        <button className="btn ask-new" onClick={() => setTurns([])} disabled={!turns.length}>
+          <MessageSquarePlus size={14} /> New conversation
+        </button>
+        {turns.length > 0 && (
+          <div className="ask-history">
+            <div className="nav-label">This conversation</div>
+            {turns.map((t, i) => (
+              <span key={i}>{t.question}</span>
+            ))}
+          </div>
+        )}
+      </aside>
     </div>
   );
 }
