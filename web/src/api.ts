@@ -122,6 +122,15 @@ export type Overview = {
   money?: Money;
 };
 
+// New UK companies each month, and the last 30 days against the 30 before.
+export type Growth = {
+  available: boolean;
+  as_of?: string;
+  last_30?: number;
+  prior_30?: number;
+  months?: { month: string; count: number }[];
+};
+
 export type Place = Record<string, string> & { lat: number; lon: number; miles?: number };
 
 export type MapResults = {
@@ -190,6 +199,7 @@ export const api = {
   masterKinds: (group: string) => call<{ kind: string; count: number }[]>("GET", `master/kinds?group=${group}`),
   masterExportUrl: (query: URLSearchParams) => `/api/master/export?${query}`,
   overview: () => call<Overview>("GET", "overview"),
+  growth: () => call<Growth>("GET", "overview/growth"),
   map: (query: URLSearchParams) => call<MapResults>("GET", `map?${query}`),
   heat: (query: URLSearchParams) => call<Heat>("GET", `map/heat?${query}`),
   sectors: (group: string) => call<SectorTree>("GET", `sectors?group=${group}`),

@@ -531,3 +531,57 @@ td .name { font-weight: 600; }
   border: 1px solid var(--line-2); border-radius: 6px; box-shadow: none; font: 12px/1.4 Inter, system-ui, sans-serif; }
 .map .leaflet-tooltip.pin-label { font-weight: 600; padding: 3px 8px; }
 .map .leaflet-tooltip.heat-tip::before, .map .leaflet-tooltip.pin-label::before { display: none; }
+
+/* Dashboard overview: calm, near-monochrome panels after the reference Edem shared on 15 October
+   2026. White carries the figures, grey the labels, and colour only marks a rise or fall. */
+.overview { display: grid; gap: 16px; grid-template-columns: minmax(0, 2.2fr) minmax(260px, 1fr); }
+.overview .span-2 { grid-column: 1 / -1; }
+.card.calm { background: #0d0f15; border-color: rgba(255, 255, 255, 0.06); }
+.overview-main { padding: 0; overflow: hidden; }
+.stat-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.stat-cell { display: grid; gap: 6px; padding: 18px 20px; border-right: 1px solid rgba(255, 255, 255, 0.06); }
+.stat-cell:last-child { border-right: none; }
+.stat-cell b { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.stat-label { font-size: 12px; color: var(--muted); }
+.stat-note { font-size: 12px; color: #6b7183; }
+.delta { display: inline-flex; align-items: center; gap: 2px; font-weight: 600; }
+.delta.up { color: #34d399; } .delta.down { color: #f87171; }
+.chart-block { padding: 18px 20px 12px; display: grid; gap: 8px; }
+.chart-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.chart-head > div { display: grid; gap: 2px; }
+.chart-big { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.area-chart { width: 100%; height: auto; display: block; cursor: crosshair; }
+.area-chart .grid { stroke: rgba(255, 255, 255, 0.05); }
+.area-chart .axis { fill: #6b7183; font-size: 11px; }
+.area-chart .area-line { fill: none; stroke: #d4d7e0; stroke-width: 1.6; }
+.area-chart .cursor { stroke: rgba(255, 255, 255, 0.35); stroke-width: 1; }
+.area-chart .dot { fill: #fff; stroke: #0d0f15; stroke-width: 2; }
+.area-chart .tip-box { fill: #171a22; stroke: rgba(255, 255, 255, 0.1); }
+.area-chart .tip-sub { fill: var(--muted); font-size: 11px; }
+.area-chart .tip-main { fill: #fff; font-size: 13px; font-weight: 600; }
+.overview-side { display: grid; gap: 14px; align-content: start; }
+.gauge { position: relative; width: 100%; max-width: 230px; margin: 0 auto; }
+.gauge svg { width: 100%; display: block; }
+.gauge line { stroke: rgba(255, 255, 255, 0.12); stroke-width: 3.5; stroke-linecap: round; }
+.gauge line.on { stroke: #c9ccd6; }
+.gauge-mid { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 2px; }
+.gauge-mid b { font-size: 26px; font-weight: 600; }
+.center { text-align: center; }
+.side-split { border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 14px; display: grid; gap: 6px; }
+.tick-meter { display: flex; gap: 2px; height: 22px; }
+.tick-meter i { flex: 1; border-radius: 1px; background: rgba(255, 255, 255, 0.1); }
+.tick-meter i.on { background: #c9ccd6; }
+.insights { display: grid; gap: 10px; align-content: start; }
+.insights h3 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+.insight-lead { margin: 0; font-size: 19px; line-height: 1.4; color: #c9ccd6; text-wrap: balance; }
+.insights ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; display: grid; gap: 6px; }
+@media (max-width: 900px) {
+  .overview { grid-template-columns: minmax(0, 1fr); }
+  .stat-cell { border-right: none; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+}
+.calm .hbar-track { height: 8px; }
+.calm .hbar-track i { background: rgba(255, 255, 255, 0.12); border-radius: 0 3px 3px 0; }
+.calm .hbar-track em { background: #c9ccd6; }
+.overview .insights { grid-column: 1 / -1; }
+.insights ul { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); list-style: none; padding: 0; }
+.insights li { padding-left: 12px; border-left: 2px solid rgba(255, 255, 255, 0.12); }

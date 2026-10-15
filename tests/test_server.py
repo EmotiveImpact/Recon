@@ -340,6 +340,22 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(view["by_district"][0]["district"], "BN1")
 
     @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_new_companies_each_month_and_the_last_30_days(self):
+        import datetime
+        import duckdb
+        end = datetime.date.today()
+        days = [end, end - datetime.timedelta(days=5), end - datetime.timedelta(days=40),
+                end - datetime.timedelta(days=4000)]  # The last one is too old to count.
+        os.makedirs(os.path.join(self.folder, "companies-house"))
+        out = os.path.join(self.folder, "companies-house", "companies-house-2026-10-01.parquet")
+        values = ", ".join(f"('{n}', '{d.strftime('%d/%m/%Y')}')" for n, d in enumerate(days))
+        duckdb.sql(f"""COPY (SELECT * FROM (VALUES {values}) t(CompanyNumber, IncorporationDate))
+                       TO '{out}' (FORMAT parquet)""")
+        growth = self.dash.growth()
+        self.assertEqual((growth["last_30"], growth["prior_30"]), (2, 1))
+        self.assertEqual(sum(m["count"] for m in growth["months"]), 3 if end.day > 1 else 2)
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
     def test_keeps_the_lists_when_the_shared_folder_blinks(self):
         self.assertEqual(self.dash.places({"near": ["BN1"], "miles": ["50"]})["total"], 3)
         with mock.patch.object(self.dash, "trade_files", return_value={}):

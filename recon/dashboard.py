@@ -16,6 +16,7 @@ in that town), so no outside service is needed.
 """
 
 import csv
+import datetime
 import glob
 import math
 import os
@@ -70,6 +71,7 @@ class Dashboard:
         self._db = None
         self._loaded = None  # the trade files and their times, when loaded
         self._columns = set()
+        self._growth = None  # new companies each month, worked out once
 
     # Files ------------------------------------------------------------------
 
@@ -187,6 +189,35 @@ class Dashboard:
             "trades": trades,
             "money": self.money(),
         }
+
+    def growth(self):
+        """New UK companies each month for the last two years, and the last 30
+        days against the 30 before, from the Companies House file. The file
+        lists companies still open, so older months count only the survivors."""
+        if self._growth is not None:
+            return self._growth
+        found = sorted(glob.glob(os.path.join(self.folder or "", "companies-house", "*.parquet")))
+        if not found:
+            return {"available": False}
+        with self.lock:
+            rows = self.db().execute("""
+                SELECT CAST(try_strptime(IncorporationDate, '%d/%m/%Y') AS DATE) AS day, count(*)
+                FROM read_parquet(?)
+                WHERE TRY_CAST(right(IncorporationDate, 4) AS INTEGER) >= year(current_date) - 3
+                GROUP BY 1 HAVING day IS NOT NULL ORDER BY 1""", [found[-1]]).fetchall()
+        if not rows:
+            return {"available": False}
+        end = rows[-1][0]
+        last = sum(n for d, n in rows if 0 <= (end - d).days < 30)
+        prior = sum(n for d, n in rows if 30 <= (end - d).days < 60)
+        months = {}
+        for day, n in rows:
+            months[day.strftime("%Y-%m")] = months.get(day.strftime("%Y-%m"), 0) + n
+        latest = (end - datetime.timedelta(days=1)).strftime("%Y-%m")
+        series = [{"month": m, "count": n} for m, n in sorted(months.items()) if m <= latest][-24:]
+        self._growth = {"available": True, "as_of": end.isoformat(), "last_30": last,
+                        "prior_30": prior, "months": series}
+        return self._growth
 
     def money(self, where="", params=()):
         """Who publishes their money: counts by size and by what they file."""
