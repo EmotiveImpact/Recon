@@ -1,0 +1,23 @@
+{
+  "name": "Plumbers: UK",
+  "project": "Plumbers",
+  "country": "GB",
+  "notes": "Plumbers, and the heating and boiler engineers who mostly do plumbing too.",
+  "sectors": {
+    "Plumbers": {
+      "overture": ["plumbing", "water_heater_installation_repair"],
+      "osm": [["craft", "plumber"]],
+      "sic": ["43220"]
+    },
+    "Heating engineers": {
+      "overture": ["hvac_service"],
+      "osm": [["craft", "hvac"], ["craft", "heating_engineer"]],
+      "sic": []
+    },
+    "Drainage": {
+      "overture": ["septic_service"],
+      "osm": [],
+      "sic": []
+    }
+  }
+}

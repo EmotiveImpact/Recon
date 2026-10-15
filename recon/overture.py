@@ -109,6 +109,13 @@ def fetch(target, release=None, min_confidence=0.5):
     return [p for p in (to_place(target, row) for row in rows) if p], release
 
 
+def unused_categories(target, found):
+    """The target's categories that no place found has as its main category.
+    Overture renames categories between releases, and a renamed one silently
+    matches nothing (the September 2026 release renamed "spas" to "spa")."""
+    return sorted(set(target.overture_categories()) - {p["category"] for p in found})
+
+
 def to_place(target, row):
     """One Overture row (in the order fetch() selects) as a place, or None."""
     (pid, name, primary, alternates, websites, phones, emails, socials, street, town, code,

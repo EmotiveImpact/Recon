@@ -11,5 +11,8 @@ overture = ["duckdb>=1.1"]
 [project.scripts]
 recon = "recon.cli:main"
 
-[tool.setuptools]
-packages = ["recon"]
+[tool.setuptools.packages.find]
+include = ["recon", "recon.*"]
+
+[tool.setuptools.package-data]
+recon = ["trades.json"]

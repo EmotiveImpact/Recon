@@ -96,7 +96,7 @@ class Directory:
 
     @property
     def available(self):
-        return bool(self.folder) and any(self.files(g) for g in GROUPS)
+        return bool(self.folder) and any(self.areas(g) for g in GROUPS)
 
     def db(self):
         if self._db is None:
