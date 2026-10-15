@@ -340,6 +340,33 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(view["by_district"][0]["district"], "BN1")
 
     @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
+    def test_trade_rows_take_the_master_databases_company(self):
+        # The trade sweep couldn't match Hove Homes; the master database joined
+        # it to a company on Companies House, so the map must agree it may be emailed.
+        import duckdb
+        path = os.path.join(self.folder, "trades", "builders.csv")
+        with open(path, encoding="utf-8") as handle:
+            rows = list(csv.reader(handle))
+        rows[0].append("key")
+        for number, row in enumerate(rows[1:]):
+            row.append(f"00000000000{number}")
+        with open(path, "w", newline="", encoding="utf-8") as handle:
+            csv.writer(handle).writerows(rows)
+        os.makedirs(os.path.join(self.folder, "uk", "england"))
+        out = os.path.join(self.folder, "uk", "england", "part-0.parquet")
+        duckdb.sql(f"""COPY (SELECT * FROM (VALUES
+            ('companies-house; overture-places-gb; recon-runs', 'can email',
+             'companies-house:07654321; recon-runs:trades-builders:000000000001'),
+            ('overture-places-gb; recon-runs', 'can email', 'recon-runs:trades-builders:000000000002'))
+            t(sources, can_email, record_ids)) TO '{out}' (FORMAT parquet)""")
+        view = self.dash.places({"rule": ["can email"]})
+        self.assertEqual(view["total"], 2)
+        self.assertEqual(view["money"]["registered"], 1)
+        hove = self.dash.places({"near": ["BN3"], "miles": ["1"]})["points"][0]
+        self.assertEqual(hove["company_number"], "07654321")
+        self.assertEqual(hove["size_band"], "company, size not read yet")
+
+    @unittest.skipUnless(importlib.util.find_spec("duckdb"), "needs DuckDB")
     def test_new_companies_each_month_and_the_last_30_days(self):
         import datetime
         import duckdb

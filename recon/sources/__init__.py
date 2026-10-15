@@ -36,10 +36,17 @@ FIELDS = [
 ]
 
 # Words in a name that show a business is incorporated. Used only when a
-# register does not say the legal form outright.
-_CORPORATE_NAME = re.compile(
-    r"\b(ltd|limited|plc|llp|l\.l\.p|cic|cio|inc|incorporated|corp|corporation|"
-    r"llc|l\.l\.c|pllc|lp|co\.?|company|pc|p\.c|scio)\b\.?\s*$", re.I)
+# register does not say the legal form outright. In the UK only the words the
+# law reserves for corporate bodies count: "& Co" and "Company" are often a
+# partnership or sole trader's trading name, a limited partnership (LP) is not
+# a corporate subscriber in England and Wales, and "PC" is as likely a computer
+# shop. When unsure, post only (docs/RULES.md).
+_CORPORATE_NAME = {
+    "GB": re.compile(r"\b(ltd|limited|plc|llp|l\.l\.p|cic|cio|scio)\b\.?\s*$", re.I),
+    "US": re.compile(
+        r"\b(ltd|limited|plc|llp|l\.l\.p|cic|cio|inc|incorporated|corp|corporation|"
+        r"llc|l\.l\.c|pllc|lp|co\.?|company|pc|p\.c|scio)\b\.?\s*$", re.I),
+}
 
 
 def record(source, source_id, name, **values):
@@ -105,9 +112,11 @@ def clean_phones(value, country=""):
     return found
 
 
-def corporate_name(name):
-    """True when a name ends in a company word such as Ltd, Inc or LLC."""
-    return bool(_CORPORATE_NAME.search((name or "").strip()))
+def corporate_name(name, country="GB"):
+    """True when a name ends in a company word: Ltd, PLC, LLP or CIC in the
+    UK; also Inc, LLC, Corp and the like in the US."""
+    words = _CORPORATE_NAME["US" if country == "US" else "GB"]
+    return bool(words.search((name or "").strip()))
 
 
 def rule(country, corporate, reason):

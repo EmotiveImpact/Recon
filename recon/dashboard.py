@@ -128,7 +128,7 @@ class Dashboard:
         db.execute("CREATE TABLE places AS " + " UNION ALL BY NAME ".join(parts))
         self._columns = {row[0] for row in db.execute("DESCRIBE places").fetchall()}
         # Missing columns become empty, so the queries below work on older lists.
-        for column in ("lat", "lon", "email", "all_emails", "phone", "mobile", "website",
+        for column in ("key", "company_match", "lat", "lon", "email", "all_emails", "phone", "mobile", "website",
                        "contact_rule", "postcode", "town", "address", "company_number",
                        "company_type", "socials", "email_type", "category") + MONEY:
             if column not in self._columns:
@@ -139,8 +139,50 @@ class Dashboard:
                         CASE WHEN length(upper(replace(coalesce(postcode, ''), ' ', ''))) >= 5
                              THEN upper(replace(postcode, ' ', ''))[:-4] END AS outward
                       FROM places""")
+        self._add_register_matches(db)
         self._add_founded(db)
         self._loaded = stamp
+
+    def _master_files(self):
+        """The UK area files of the master database, preferring a big area's
+        folder of parts (england/part-0.parquet ...) over a single file."""
+        root = os.path.join(self.folder, "uk")
+        found = []
+        for path in sorted(glob.glob(os.path.join(root, "*.parquet"))):
+            parts = sorted(glob.glob(os.path.join(os.path.splitext(path)[0], "part-*.parquet")))
+            if not parts:
+                found.append(path)
+        found += sorted(glob.glob(os.path.join(root, "*", "part-*.parquet")))
+        return found
+
+    def _add_register_matches(self, db):
+        """Take the master database's company for trade rows the trade sweep
+        couldn't match. The master database joins on more (website, email,
+        phone) and, when it finds the same business on Companies House as a
+        company, the row may be emailed there; without this the map said
+        "post only" for a business the register search said "can email"."""
+        files = self._master_files()
+        if not files:
+            return
+        try:
+            db.execute("""CREATE OR REPLACE TEMP TABLE register_matches AS
+                SELECT DISTINCT ON (rid) rid, number FROM (
+                    SELECT unnest(regexp_extract_all(record_ids, 'recon-runs:(trades-[a-z0-9-]+:[0-9a-f]+)', 1)) AS rid,
+                           regexp_extract(record_ids, '(?:^|; )companies-house:([0-9A-Z]{8})', 1) AS number
+                    FROM read_parquet(?, union_by_name = true)
+                    WHERE sources LIKE '%recon-runs%' AND sources LIKE '%companies-house%'
+                      AND can_email = 'can email')
+                WHERE number <> ''""", [files])
+            db.execute("""UPDATE places SET contact_rule = 'can email', company_number = m.number,
+                              company_match = 'joined in the master database',
+                              size_band = 'company, size not read yet'
+                          FROM register_matches m
+                          WHERE m.rid = 'trades-' || places.trade || ':' || places.key
+                            AND coalesce(places.contact_rule, '') <> 'can email'
+                            AND coalesce(places.company_number, '') = ''""")
+            db.execute("DROP TABLE register_matches")
+        except Exception:  # The trade lists still work on their own.
+            pass
 
     def _add_founded(self, db):
         """The year each registered company started, from the Companies House

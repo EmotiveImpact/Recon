@@ -49,10 +49,16 @@ class RecordTests(unittest.TestCase):
         self.assertEqual((r["address"], r["postcode"]), ("1 High St, BRISTOL", ""))
 
     def test_company_words(self):
-        self.assertTrue(sources.corporate_name("Acme Widgets Inc."))
+        self.assertTrue(sources.corporate_name("Acme Widgets Inc.", "US"))
+        self.assertTrue(sources.corporate_name("Bay Plumbing LLC", "US"))
         self.assertTrue(sources.corporate_name("Glow Room Ltd"))
         self.assertTrue(sources.corporate_name("Leith Community Care SCIO"))
         self.assertFalse(sources.corporate_name("Jo's Hair"))
+        # In the UK only words the law keeps for corporate bodies count.
+        for name in ("Raymond Barker & Co", "The Sign and Workwear Company", "Acme Widgets Inc.",
+                     "Northern Ventures LP", "Bob's PC"):
+            self.assertFalse(sources.corporate_name(name), name)
+        self.assertTrue(sources.corporate_name("Glow Room Limited."))
 
     def test_rules(self):
         self.assertEqual(sources.rule("GB", True, "")[0], "can email")
@@ -379,6 +385,27 @@ class BuildTests(unittest.TestCase):
                 self.assertEqual(next(csv.DictReader(handle))["organisations"], "2")
             target = os.path.join(out, "glow.csv")
             self.assertEqual(master.export(out, "emails <> ''", target), 2)
+
+    def test_a_us_listing_does_not_make_a_uk_business_emailable(self):
+        import duckdb
+        a = dict(SOURCE, name="register-a")
+        b = dict(SOURCE, name="register-b")
+        loaders = {
+            "register-a": types.SimpleNamespace(SOURCE=a, rows=lambda cache: iter([
+                sources.record(a, 1, "Treofan Films", country="GB", postcode="SW1A 1AA",
+                               emails="hello@treofan.example", can_email="post only")])),
+            "register-b": types.SimpleNamespace(SOURCE=b, rows=lambda cache: iter([
+                sources.record(b, 2, "Treofan Films", country="US", emails="hello@treofan.example",
+                               can_email="can email")])),
+        }
+        with tempfile.TemporaryDirectory() as out, \
+                mock.patch.object(master, "registry", return_value=loaders), \
+                mock.patch.object(master, "catalogue", return_value=[a, b]):
+            for name in loaders:
+                master.load_source(name, out, os.path.join(out, "cache"))
+            master.combine(out, list(loaders))
+            found = duckdb.sql(f"SELECT can_email FROM '{os.path.join(out, 'organisations.parquet')}'").fetchall()
+        self.assertEqual(found, [("post only",)])
 
     def test_enrichment_joins_but_never_stands_alone(self):
         a = dict(SOURCE, name="register-a")
