@@ -6,9 +6,12 @@ out/
 *.xlsx
 *.zip
 *.parquet
+*.pbf
 *.jsonl
 !tests/**
 __pycache__/
 *.pyc
 .venv/
 .env
+*.csv.gz
+*.duckdb

@@ -25,8 +25,8 @@ It does this for free, from open data, in a way Edem would be comfortable explai
 
 ## Principles
 
-- **Open data, used fairly.** Overture Maps, OpenStreetMap and Companies House. No scraping Google, booking platforms or professional registers. No bought lists.
-- **Collect only what we can use.** Emails are only looked up for businesses we may email.
+- **Open data, used fairly.** Overture Maps, OpenStreetMap and Companies House. No scraping Google, booking platforms or the search pages of professional registers; official bulk downloads published for reuse are fine. No bought lists.
+- **See everything, use only what's allowed.** Recon shows every email, phone and social link it finds (Edem's choice), labelled, while `contact_rule` decides who may be emailed.
 - **Be a good guest online.** Respect robots.txt, visit few pages, go slowly, say who we are.
 - **Finding and sending stay separate.** Recon finds. Sending is a later, deliberate stage with its own domain, unsubscribe handling and suppression list.
 - **The code is public; the lists never are.**
