@@ -12,7 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import MapView from "./pages/MapView";
 import Ask from "./pages/Ask";
 
-const COLOURS = ["#7c5cff", "#22d3ee", "#34d399", "#f472b6", "#fbbf24", "#60a5fa"];
+const COLOURS = ["#c9ccd6", "#7fd1ae", "#8b90a0", "#d9c9a3", "#a3b4d9", "#c9a3b4"];
 export const colourFor = (i: number) => COLOURS[i % COLOURS.length];
 
 export default function App() {

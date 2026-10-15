@@ -27,8 +27,8 @@ const ALL_FILTERS: [string, string, typeof Mail][] = [
 ];
 const SIZES: [string, string][] = [["", "Any size"], ["micro", "Micro"], ["small", "Small"], ["medium-large", "Medium or large"]];
 const WORTH: [string, string][] = [["", "Any worth"], ["10000", "£10k+"], ["100000", "£100k+"], ["1000000", "£1m+"]];
-const GREEN = "#2dd4bf";
-const AMBER = "#a78bfa";
+const GREEN = "#7fd1ae";
+const AMBER = "#7d8291";
 
 // One business on the map, whichever list it came from.
 type Item = {
@@ -52,7 +52,7 @@ const link = (site: string) => (/^https?:\/\//i.test(site) ? site : `https://${s
 const shade = (share: number) => {
   const t = Math.max(0, Math.min(1, share / 0.3));
   const mix = (a: number, b: number) => Math.round(a + (b - a) * t);
-  return `rgb(${mix(124, 45)}, ${mix(92, 212)}, ${mix(255, 191)})`;
+  return `rgb(${mix(78, 214)}, ${mix(83, 218)}, ${mix(96, 226)})`;
 };
 const pinColour = (i: Item) => (i.rule === "can email" ? GREEN : AMBER);
 const distance = (m: number | null) => (m === null ? "" : `${m < 10 ? m.toFixed(1) : Math.round(m)} mi`);
@@ -251,7 +251,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
       for (const d of heat.districts) {
         L.circleMarker([d.lat, d.lon], {
           radius: 2 + Math.sqrt(d.count / top) * 9, stroke: false,
-          fillColor: shade(d.count ? d.may_email / d.count : 0), fillOpacity: 0.6,
+          fillColor: shade(d.count ? d.may_email / d.count : 0), fillOpacity: 0.38,
         })
           .bindTooltip(`<b>${d.district}</b><br>${fmt(d.count)} businesses, ${fmt(d.may_email)} can email`, { direction: "top", className: "heat-tip" })
           .on("click", () => goTo(d.district))
@@ -262,7 +262,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
     }
     if (view.centre) {
       L.circle([view.centre.lat, view.centre.lon], {
-        radius: radius * 1609.34, color: "#22d3ee", weight: 1.5, dashArray: "4 6", fillColor: "#22d3ee", fillOpacity: 0.05,
+        radius: radius * 1609.34, color: "#e5e7eb", weight: 1, dashArray: "4 6", fillColor: "#e5e7eb", fillOpacity: 0.03,
       }).addTo(group);
     }
     for (const i of view.items) {
@@ -576,7 +576,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
               <div className="hud-top">
                 {richest.map((i, n) => (
                   <button key={`${i.name}-${n}`} onClick={() => show(i)}>
-                    <span className="dot" style={{ background: n === 0 ? GREEN : n === 1 ? "#22d3ee" : AMBER }} />
+                    <span className="dot" style={{ background: n === 0 ? GREEN : n === 1 ? "#c9ccd6" : AMBER }} />
                     <span className="l"><b>{i.name}</b><span>{i.size || i.what}{i.staff ? `, ${i.staff} staff` : ""}</span></span>
                     <span className="v">{money(i.netAssets)}</span>
                   </button>
@@ -664,13 +664,13 @@ function Trend({ points }: { points: { year: number; count: number }[] }) {
     <svg viewBox={`0 0 ${w} ${h}`} className="trend" role="img" aria-label="Companies started each year">
       <defs>
         <linearGradient id="trend-fill" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor="#22d3ee" stopOpacity="0.25" />
-          <stop offset="1" stopColor="#22d3ee" stopOpacity="0" />
+          <stop offset="0" stopColor="#ffffff" stopOpacity="0.12" />
+          <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
         </linearGradient>
       </defs>
       <path d={`${line} L${xy[xy.length - 1][0]},${h - 14} L${xy[0][0]},${h - 14} Z`} fill="url(#trend-fill)" />
-      <path d={line} fill="none" stroke="#22d3ee" strokeWidth="1.6" />
-      {xy.map(([x, y], n) => <circle key={n} cx={x} cy={y} r="1.8" fill="#22d3ee"><title>{`${points[n].year}: ${points[n].count}`}</title></circle>)}
+      <path d={line} fill="none" stroke="#c9ccd6" strokeWidth="1.4" />
+      {xy.map(([x, y], n) => <circle key={n} cx={x} cy={y} r="1.8" fill="#c9ccd6"><title>{`${points[n].year}: ${points[n].count}`}</title></circle>)}
       <text x={pad} y={h - 2} className="trend-l">{points[0].year}</text>
       <text x={w - pad} y={h - 2} textAnchor="end" className="trend-l">{last.year}: {fmt(last.count)}</text>
     </svg>
@@ -683,8 +683,8 @@ function Ring({ part, whole }: { part: number; whole: number }) {
   const around = 2 * Math.PI * r;
   return (
     <svg viewBox="0 0 90 90" className="ring">
-      <circle cx="45" cy="45" r={r} fill="none" stroke="#7c5cff" strokeOpacity="0.85" strokeWidth="7" />
-      <circle cx="45" cy="45" r={r} fill="none" stroke="#2dd4bf" strokeWidth="7" strokeLinecap="round"
+      <circle cx="45" cy="45" r={r} fill="none" stroke="#ffffff" strokeOpacity="0.1" strokeWidth="5" />
+      <circle cx="45" cy="45" r={r} fill="none" stroke="#e5e7eb" strokeWidth="5" strokeLinecap="round"
         strokeDasharray={`${share * around} ${around}`} transform="rotate(-90 45 45)" />
       <text x="45" y="46" textAnchor="middle" className="ring-v">{(share * 100).toFixed(1)}%</text>
       <text x="45" y="60" textAnchor="middle" className="ring-l">{fmt(part)}</text>
