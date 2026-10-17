@@ -85,6 +85,14 @@ def fill(places, smtp_from=None, mx=None, ask=None):
         else:
             print(f"  Reacher is not running at {REACHER} and no --smtp-from was given; "
                   "checking that each domain takes email and each address looks right")
+    if isinstance(mx, dns.Cache):
+        domains = set()
+        for place in places:
+            if (place["email"] or place["contact_email"]) and not place["mail_server"]:
+                domains.add(text.domain(place["website"]))
+            for address in (place["email"], place["contact_email"]):
+                domains.add(address.partition("@")[2])
+        mx.prefill(domains)
     checked = 0
     for place in places:
         site = text.domain(place["website"])

@@ -31,6 +31,14 @@ How Recon applies it: a business matched to Companies House as a company or LLP 
 
 CAN-SPAM allows business email without consent, as long as each email has an honest sender and subject line, a working unsubscribe that is honoured within ten business days, and a real postal address. Recon marks every US business `can email`. Some states add rules for texts and calls; Recon does neither.
 
+## Where lists may come from
+
+Open data published for reuse, including official bulk downloads from governments and regulators (company registers, charity registers, state licence files), honouring each source's terms (Edem, 13 October 2026). Never scraped search pages, Google Maps, booking platforms, breached data or bought lists. Some sources set their own limits, and those win:
+- Washington state (RCW 42.56.070(8)): its lists of individuals may not be used for commercial purposes, so anyone there not plainly incorporated is `post only`.
+- The Scottish charity register bans direct marketing, and the ICO register's licence excludes personal data: neither is used.
+
+In the master database (MASTER.md), the UK rule above is applied per register and legal form: charitable companies, CIOs, community interest companies, registered societies, councils, health boards, academy trusts, colleges and universities count as corporate bodies; trusts, unincorporated charities and associations (most trade unions), partnerships, sole traders and childminders are `post only`.
+
 ## Anywhere else
 
 Recon marks businesses `check local rules`. Look the rules up before adding a target for a new country, and add them to `recon/rules.py` and to this file.

@@ -9,11 +9,12 @@ at a time, repeated, or resumed. The finished list goes to out/.
 import argparse
 import collections
 import os
+import re
 import sys
 from datetime import date
 
-from . import (companies_house, dns, emails, finder, hunter, mailbox, merge, osm, overture,
-               people, places, rules, text, verify)
+from . import (companies_house, contacts, dns, emails, finder, geo, hunter, mailbox, merge, osm,
+               overture, people, places, registers, rules, text, verify)
 from .target import Target
 
 STEPS = ["places", "companies", "rules", "people", "emails", "verify", "export"]
@@ -26,18 +27,27 @@ def _paths(target_file):
 
 
 def step_places(target, store, args):
+    contacts.fetch_lists()
     groups = []
     if not args.skip_overture:
         print("Reading Overture Maps…")
         found, release = overture.fetch(target, release=args.overture_release)
         print(f"  {len(found):,} places from Overture release {release}")
+        unused = overture.unused_categories(target, found)
+        if unused:
+            print("  No places in these categories, which Overture may have renamed "
+                  "('recon categories' finds the new names): " + ", ".join(unused))
         groups.append(found)
     if not args.skip_osm:
         print("Reading OpenStreetMap…")
-        found = osm.fetch(target)
+        found = osm.fetch(target, extract=args.osm_extract or None,
+                          folder=os.path.join("data", "osm"), overpass=args.osm_overpass)
         print(f"  {len(found):,} places from OpenStreetMap")
         groups.append(found)
-    combined = merge.combine(*groups)
+    if target.registers:
+        print("Reading registers…")
+        groups.append(registers.fetch(target, os.path.join("data", "registers"), args.postcodes))
+    combined = merge.combine(*groups, target=target)
     print(f"  {len(combined):,} businesses once duplicates are joined")
     places.write(store, combined)
 
@@ -51,9 +61,15 @@ def step_companies(target, store, args):
         return
     rows = places.read(store)
     print("Reading Companies House…")
-    index, total = companies_house.load(args.companies_house, target.sic_codes())
+    named = {text.name_key(r["legal_name"]) for r in rows if r["legal_name"]}
+    index, total = companies_house.load(args.companies_house, target.sic_codes(), named)
     print(f"  {total:,} active companies in these trades")
-    matched = companies_house.mark(rows, index)
+    postcodes = None
+    if not args.skip_postcodes:
+        path = args.postcodes or geo.postcode_file(os.path.join("data", "geo"))
+        if path:
+            postcodes = geo.Postcodes(path, companies_house.wanted_postcodes(index))
+    matched = companies_house.mark(rows, index, target, postcodes)
     print(f"  {matched:,} of {len(rows):,} businesses matched to a company")
     places.write(store, rows)
 
@@ -83,6 +99,7 @@ def step_emails(target, store, args):
     rows = places.read(store)
     folder = os.path.dirname(store)
     cache = os.path.join(folder, "email-cache.jsonl")
+    contacts.fetch_lists()
     print("Looking for emails on businesses' own websites…")
     everyone = not args.can_email_only
     emails.fill(rows, cache, everyone=everyone, workers=args.workers, country=target.country)
@@ -164,16 +181,26 @@ def main(argv=None):
                         help="in 'emails', also ask Hunter (needs RECON_HUNTER_KEY; uses credits)")
     parser.add_argument("--companies-house", nargs="*", default=[],
                         help="Companies House free data zip or CSV files (UK only)")
+    parser.add_argument("--postcodes", help="GeoNames' GB_full.csv.zip, for distances to "
+                                            "registered offices (downloaded to data/geo/ if not given)")
+    parser.add_argument("--skip-postcodes", action="store_true",
+                        help="judge distances from the places found instead")
     parser.add_argument("--overture-release", help="defaults to the newest")
     parser.add_argument("--skip-overture", action="store_true")
     parser.add_argument("--skip-osm", action="store_true")
+    parser.add_argument("--osm-extract", nargs="*", default=[],
+                        help="read these .osm.pbf files instead of downloading the country's "
+                             "OpenStreetMap extract (kept in data/osm/ for a week)")
+    parser.add_argument("--osm-overpass", action="store_true",
+                        help="ask the public Overpass API instead of reading an extract")
     parser.add_argument("--can-email-only", action="store_true",
                         help="only read the websites of businesses we may email "
                              "(by default every website is read, so you see every address)")
     parser.add_argument("--all-emails", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--workers", type=int, default=8)
-    parser.add_argument("--words", nargs="*", default=["hair", "beauty", "spa", "salon"],
-                        help="for 'categories': words to look for in category names")
+    parser.add_argument("--words", nargs="*", default=[],
+                        help="for 'categories': words to look for in category names "
+                             "(by default, the words of the target's sector names)")
     args = parser.parse_args(argv)
 
     if args.command == "find":
@@ -185,7 +212,10 @@ def main(argv=None):
     slug, _, store = _paths(args.target)
 
     if args.command == "categories":
-        for category, count in overture.categories(target, args.words, args.overture_release):
+        found = args.words or sorted({w for name in target.sectors
+                                      for w in re.findall(r"[a-z]{3,}", name.lower())
+                                      if w not in ("and", "the", "for", "other")})
+        for category, count in overture.categories(target, found, args.overture_release):
             print(f"{count:>8,}  {category}")
         return 0
 
