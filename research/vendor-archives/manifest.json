@@ -1,0 +1,65 @@
+[
+  {
+    "file": "OrbiSearch__openkiln-96786195ad1120c81388b28928b3a0ebd1f07a0d.tar.gz",
+    "bytes": 96429,
+    "sha256": "6d49bd13aab6fdaa6910681c7bcf2f063de9f4c9adc7c5cfb5d18aacf56b442a",
+    "members": 101,
+    "parts": 1
+  },
+  {
+    "file": "clawnify__OpenProspector-2443c450224f210da2e1cac9529daa4b785a5a36.tar.gz",
+    "bytes": 2036859,
+    "sha256": "fd8c6ab644b49b58af94d3c8f4ad8a5b360e88abf6067a8c907afb4a256e3be0",
+    "members": 126,
+    "parts": 4
+  },
+  {
+    "file": "debpalash__OpenGTM-ac011a6891749ca456ec4820cd20b28c71479f64.tar.gz",
+    "bytes": 13955636,
+    "sha256": "6edbe1603007e34498ee5c7064cfb43611026a87d6508f3261c22e95a1c17c46",
+    "members": 1264,
+    "parts": 27
+  },
+  {
+    "file": "dlt-hub__dlt-2c984279acff03b29b7dc2f7de496cc65898ea18.tar.gz",
+    "bytes": 10999963,
+    "sha256": "019c8d38d0b801feace1e5cf5ae5bdd217b2e1d583d2b0a194d21d6c14d0d368",
+    "members": 2608,
+    "parts": 21
+  },
+  {
+    "file": "firecrawl__firecrawl-bc08c4f8d03a8b12b3892eb6b6a4a7840c8b4906.tar.gz",
+    "bytes": 30592485,
+    "sha256": "7e9811c8684d99a74475f377755e9693e225dfdcd599f9bab4bd403cd4652e0c",
+    "members": 2498,
+    "parts": 59
+  },
+  {
+    "file": "masteranime__enrichment-kit-6998898c038a1f61c900aa8d96290b93049d0b84.tar.gz",
+    "bytes": 20018,
+    "sha256": "1dcd198c964fa31d9f36901a6cae317c4ece1169a2c5eb32e085d93d946f5377",
+    "members": 35,
+    "parts": 1
+  },
+  {
+    "file": "openenrich__openenrich-570042c8b5db008aeb9026e4c2cfbd7f90712b82.tar.gz",
+    "bytes": 71590,
+    "sha256": "30b29367b35c980f3fd930bccdd296fc3957a67e2d8ea9be0664cae8d87dfa41",
+    "members": 54,
+    "parts": 1
+  },
+  {
+    "file": "reacherhq__check-if-email-exists-5fba96e451e987abd7a03ef89dd30df3cc9a0a18.tar.gz",
+    "bytes": 1296554,
+    "sha256": "f81ae84c26953bf50c2b90ad783c64a26f609e86d195c77facf811e81fcca16c",
+    "members": 225,
+    "parts": 3
+  },
+  {
+    "file": "unclecode__crawl4ai-30165f1ee1fb61f6cce1477feed2acc5e2181e25.tar.gz",
+    "bytes": 9392844,
+    "sha256": "2a2ecf190d2ed194b16e9d914f4b9308141e05faccf628f3ebae7b5d9510f097",
+    "members": 1107,
+    "parts": 18
+  }
+]

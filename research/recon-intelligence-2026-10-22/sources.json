@@ -1,0 +1,276 @@
+{
+  "schema_version": 1,
+  "checked_on": "2026-10-22",
+  "purpose": "Research catalogue, not executable connector configuration",
+  "default_enabled": false,
+  "private_storage_required": true,
+  "counts_are": "Publisher/platform claims, not independently validated totals",
+  "sources": [
+    {
+      "id": "companies-house-bulk",
+      "name": "Companies House basic snapshot",
+      "url": "https://download.companieshouse.gov.uk/en_output.html",
+      "entities": [
+        "company"
+      ],
+      "access": "free_bulk",
+      "offers": "Company number, legal name, status, registered address, SIC",
+      "terms": "OGL; preserve attribution",
+      "status": "core_existing",
+      "notes": "Not an employee or contact directory",
+      "enabled": false
+    },
+    {
+      "id": "companies-house-api",
+      "name": "Companies House public API",
+      "url": "https://developer.company-information.service.gov.uk/",
+      "entities": [
+        "company",
+        "officer"
+      ],
+      "access": "free_api_key",
+      "offers": "Company details and directors/officers",
+      "terms": "Official public-data API terms",
+      "status": "core_existing_or_planned",
+      "notes": "Do not import birth dates or residential addresses for prospecting",
+      "enabled": false
+    },
+    {
+      "id": "overture",
+      "name": "Overture Places",
+      "url": "https://docs.overturemaps.org/guides/places/",
+      "entities": [
+        "location"
+      ],
+      "access": "open_bulk",
+      "offers": "Trading names, premises, websites, phones and available emails/socials",
+      "terms": "Check release/source licence and attribution",
+      "status": "existing",
+      "notes": "Coverage is uneven",
+      "enabled": false
+    },
+    {
+      "id": "osm",
+      "name": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/copyright",
+      "entities": [
+        "location"
+      ],
+      "access": "open_bulk",
+      "offers": "Places, websites, available public contact tags",
+      "terms": "ODbL; attribution and database obligations",
+      "status": "existing",
+      "notes": "Use existing approved extract workflow",
+      "enabled": false
+    },
+    {
+      "id": "pdl-free",
+      "name": "PDL free company dataset",
+      "url": "https://www.peopledatalabs.com/company-dataset",
+      "entities": [
+        "company"
+      ],
+      "access": "free_download",
+      "offers": "Domains, names, industry, size, location, LinkedIn company URLs",
+      "terms": "Verify release licence before new ingestion",
+      "status": "existing_branch_source",
+      "notes": "Publisher describes 22M+ global companies, not contact profiles",
+      "enabled": false
+    },
+    {
+      "id": "pdl-mirror",
+      "name": "PDL Hugging Face mirror",
+      "url": "https://huggingface.co/datasets/andreaaltomani/company-dataset",
+      "entities": [
+        "company"
+      ],
+      "access": "public_download",
+      "offers": "Mirrored PDL company fields",
+      "terms": "Trace original release and licence",
+      "status": "alternative_mirror",
+      "notes": "About 24M advertised; overlaps pdl-free",
+      "enabled": false
+    },
+    {
+      "id": "bigpicture",
+      "name": "BigPicture free company dataset",
+      "url": "https://docs.bigpicture.io/docs/free-datasets/companies/",
+      "entities": [
+        "company"
+      ],
+      "access": "free_account_download",
+      "offers": "Name, domain, size, industry, location, LinkedIn handle",
+      "terms": "ODC-By 1.0 stated by publisher",
+      "status": "candidate",
+      "notes": "17M+ advertised; snapshot listed Q2 2024; domains may be stale",
+      "enabled": false
+    },
+    {
+      "id": "saleleads",
+      "name": "Saleleads LinkedIn company profiles",
+      "url": "https://huggingface.co/datasets/SaleleadsOrg/linkedin-company-profile",
+      "entities": [
+        "company"
+      ],
+      "access": "public_csv",
+      "offers": "Description, domains, locations, industries, counts, some funding fields",
+      "terms": "Unverified",
+      "status": "hold_terms",
+      "notes": "About 3.9M advertised; no established commercial reuse permission",
+      "enabled": false
+    },
+    {
+      "id": "opendatafoundation",
+      "name": "OpenDataFoundation / OpenData Consortium",
+      "url": "https://huggingface.co/datasets/OpenDataFoundation/opendata",
+      "entities": [
+        "company",
+        "location",
+        "business_contact"
+      ],
+      "access": "public_parquet_csv_json",
+      "offers": "Card advertises company, location and company-linked contact subsets",
+      "terms": "Unverified",
+      "status": "hold_terms",
+      "notes": "Publisher claims 103M companies, 273M locations, 101M contacts; UK and email/phone coverage unverified",
+      "enabled": false
+    },
+    {
+      "id": "bright-sample",
+      "name": "Bright Data company sample",
+      "url": "https://github.com/luminati-io/LinkedIn-dataset-samples",
+      "entities": [
+        "company"
+      ],
+      "access": "public_sample",
+      "offers": "Structured company example CSV",
+      "terms": "Check sample and vendor terms",
+      "status": "test_candidate",
+      "notes": "1,001-company sample, not full contact database",
+      "enabled": false
+    },
+    {
+      "id": "fsa",
+      "name": "FSA food hygiene ratings",
+      "url": "https://www.api.gov.uk/fsa/food-hygiene-ratings-scheme-fhrs/",
+      "entities": [
+        "location"
+      ],
+      "access": "free_api_bulk",
+      "offers": "Food premises and ratings",
+      "terms": "Official reuse terms",
+      "status": "existing_branch_source",
+      "notes": "Not a decision-maker list",
+      "enabled": false
+    },
+    {
+      "id": "charity-ew",
+      "name": "Charity Commission England and Wales",
+      "url": "https://register-of-charities.charitycommission.gov.uk/en/register/full-register-download",
+      "entities": [
+        "organisation"
+      ],
+      "access": "free_bulk",
+      "offers": "Charity records and available public financial/contact fields",
+      "terms": "Check extract terms and personal-field restrictions",
+      "status": "existing_branch_source",
+      "notes": "Not whole-UK charity coverage",
+      "enabled": false
+    },
+    {
+      "id": "pdl-paid",
+      "name": "People Data Labs commercial data",
+      "url": "https://www.peopledatalabs.com/pricing/person",
+      "entities": [
+        "company",
+        "person",
+        "contact"
+      ],
+      "access": "paid_api_bulk",
+      "offers": "Professional roles, company/person enrichment, available contacts",
+      "terms": "Subscription/field entitlements and data licence required",
+      "status": "optional_provider",
+      "notes": "Free testing excludes contact details; paid availability varies",
+      "enabled": false
+    },
+    {
+      "id": "coresignal",
+      "name": "Coresignal",
+      "url": "https://coresignal.com/pricing/",
+      "entities": [
+        "company",
+        "person",
+        "job"
+      ],
+      "access": "paid_api_bulk",
+      "offers": "Company, employee and jobs datasets; available contact enrichment",
+      "terms": "Vendor terms, dataset/field entitlements required",
+      "status": "optional_provider",
+      "notes": "Credits are not profiles; contact fields require checking",
+      "enabled": false
+    },
+    {
+      "id": "cognism",
+      "name": "Cognism",
+      "url": "https://developers.cognism.com/",
+      "entities": [
+        "company",
+        "person",
+        "contact"
+      ],
+      "access": "paid_api",
+      "offers": "Company/contact enrichment",
+      "terms": "Contract and API entitlements required",
+      "status": "optional_provider",
+      "notes": "Benchmark UK coverage; no subscription purchased",
+      "enabled": false
+    },
+    {
+      "id": "apollo",
+      "name": "Apollo",
+      "url": "https://www.apollo.io/developers",
+      "entities": [
+        "company",
+        "person",
+        "contact"
+      ],
+      "access": "account_api_export",
+      "offers": "Company/person search, enrichment and account CSV export",
+      "terms": "Account/export/API contract restrictions apply",
+      "status": "optional_provider",
+      "notes": "No authorised public full contact dump verified",
+      "enabled": false
+    },
+    {
+      "id": "hunter",
+      "name": "Hunter",
+      "url": "https://hunter.io/api.html",
+      "entities": [
+        "email"
+      ],
+      "access": "free_paid_api",
+      "offers": "Domain search, named email finding, verification",
+      "terms": "Check API plan and standalone product restrictions",
+      "status": "existing_optional",
+      "notes": "Do not equate email found with independent verification",
+      "enabled": false
+    },
+    {
+      "id": "bright-full",
+      "name": "Bright Data commercial datasets",
+      "url": "https://brightdata.com/solutions/data-collection/linkedin",
+      "entities": [
+        "company",
+        "person",
+        "job"
+      ],
+      "access": "commercial_dataset",
+      "offers": "Provider-described LinkedIn-related datasets",
+      "terms": "Contract, fields and reuse rights require checking",
+      "status": "optional_candidate",
+      "notes": "Public sample does not licence the full data",
+      "enabled": false
+    }
+  ]
+}
+

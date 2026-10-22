@@ -1,0 +1,28 @@
+{
+  "checked_on": "2026-10-22",
+  "purpose": "Private research acquisition; not permission to redistribute or market",
+  "downloads": [
+    {
+      "id": "companies-house-2026-10",
+      "url": "https://download.companieshouse.gov.uk/BasicCompanyDataAsOneFile-2026-10-01.zip",
+      "path": "data/research-acquisition/databases/CompaniesHouse-2026-10-01.zip"
+    },
+    {
+      "id": "pdl-free-company-mirror",
+      "url": "https://huggingface.co/datasets/andreaaltomani/company-dataset/resolve/0689a4c96cd3156b43d298860d5b6f29e82432bd/free_company_dataset.json.gz",
+      "path": "data/research-acquisition/databases/PDL-Free-Company-Dataset.json.gz",
+      "bytes": 2378824357
+    },
+    {
+      "id": "saleleads-company",
+      "url": "https://huggingface.co/datasets/SaleleadsOrg/linkedin-company-profile/resolve/f926728d38ecee7238a33e3983a62b42d2cb592d/linkedin-company-dataset.csv",
+      "path": "data/research-acquisition/databases/Saleleads-LinkedIn-Companies.csv",
+      "bytes": 5145113864
+    },
+    {
+      "id": "brightdata-company-sample",
+      "url": "https://raw.githubusercontent.com/luminati-io/LinkedIn-dataset-samples/main/linkedin-company-information.csv",
+      "path": "data/research-acquisition/databases/BrightData-Company-Sample.csv"
+    }
+  ]
+}
