@@ -38,3 +38,11 @@ Edem then asked for it to live in its own repository and to serve **all** his pr
 ## What has not been tried yet
 
 The tool was written in a cloud workspace that cannot reach Overture, OpenStreetMap or Companies House, so the offline tests pass but **no real run has happened yet**. The first real run should be on Edem's computer. Expect to tune the Overture category names with `recon categories` (Overture renames categories now and then) and the name matching once real numbers come back.
+
+
+## 22 October 2026: intelligence and enrichment direction
+
+The owner requested combining the dataset and Clay-alternative research into Recon and asked what product is emerging. The proposed direction is a business intelligence workspace joining companies, locations, relevant people, contact routes and project-specific research with source evidence. See [the consolidated pack](../research/recon-intelligence-2026-10-22/README.md).
+
+This expands the research and roadmap, not implemented runtime scope. Existing restrictions on private data in git, purchases, sending and core dependencies remain. Source and platform candidates are not automatically approved integrations. The pack records licence limits, overlap, source-code evidence pins and the #7/#8 integration prerequisite.
+

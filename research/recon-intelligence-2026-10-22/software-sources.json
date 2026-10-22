@@ -1,0 +1,82 @@
+{
+  "checked_on": "2026-10-22",
+  "repositories": [
+    {
+      "repo": "masteranime/enrichment-kit",
+      "sha": "6998898c038a1f61c900aa8d96290b93049d0b84",
+      "branch": "main",
+      "license": "MIT",
+      "mode": "redistributable_snapshot"
+    },
+    {
+      "repo": "clawnify/OpenProspector",
+      "sha": "2443c450224f210da2e1cac9529daa4b785a5a36",
+      "branch": "main",
+      "license": "MIT",
+      "mode": "redistributable_snapshot"
+    },
+    {
+      "repo": "openenrich/openenrich",
+      "sha": "570042c8b5db008aeb9026e4c2cfbd7f90712b82",
+      "branch": "main",
+      "license": "AGPL-3.0",
+      "mode": "redistributable_snapshot"
+    },
+    {
+      "repo": "debpalash/OpenGTM",
+      "sha": "ac011a6891749ca456ec4820cd20b28c71479f64",
+      "branch": "main",
+      "license": "AGPL-3.0 (actual LICENSE; GitHub classifier NOASSERTION)",
+      "mode": "redistributable_snapshot"
+    },
+    {
+      "repo": "BraaMohammed/bricks",
+      "sha": "586186e0d71d49a1a2fb762b66f65ad4f33d44f6",
+      "branch": "main",
+      "license": "unverified",
+      "mode": "private_research_copy"
+    },
+    {
+      "repo": "raghav3600/Altclay",
+      "sha": "874d0ed8ef0a279b12c4ec01e87d42a5a7130b0d",
+      "branch": "claude/freeclay-spreadsheet-tool-BErkj",
+      "license": "unverified",
+      "mode": "private_research_copy"
+    },
+    {
+      "repo": "OrbiSearch/openkiln",
+      "sha": "96786195ad1120c81388b28928b3a0ebd1f07a0d",
+      "branch": "main",
+      "license": "Elastic-2.0",
+      "mode": "redistributable_snapshot"
+    },
+    {
+      "repo": "firecrawl/firecrawl",
+      "sha": "bc08c4f8d03a8b12b3892eb6b6a4a7840c8b4906",
+      "branch": "main",
+      "license": "AGPL-3.0",
+      "mode": "redistributable_snapshot"
+    },
+    {
+      "repo": "unclecode/crawl4ai",
+      "sha": "30165f1ee1fb61f6cce1477feed2acc5e2181e25",
+      "branch": "main",
+      "license": "Apache-2.0 with appended attribution clause",
+      "mode": "redistributable_snapshot"
+    },
+    {
+      "repo": "dlt-hub/dlt",
+      "sha": "2c984279acff03b29b7dc2f7de496cc65898ea18",
+      "branch": "devel",
+      "license": "Apache-2.0",
+      "mode": "redistributable_snapshot"
+    },
+    {
+      "repo": "reacherhq/check-if-email-exists",
+      "sha": "5fba96e451e987abd7a03ef89dd30df3cc9a0a18",
+      "branch": "master",
+      "license": "MIT",
+      "mode": "redistributable_snapshot"
+    }
+  ]
+}

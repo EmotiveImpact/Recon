@@ -13,3 +13,16 @@ In rough order. Tick items off here as they land.
 9. **Phone screening** against the TPS and CTPS before any calling.
 
 Things decided against, so they are not reopened without a reason: scraping Google Maps, booking platforms or professional registers; buying lists; selling Recon as a product before it has proved itself on SALEANE.
+
+
+## 22 October 2026: consolidated intelligence roadmap
+
+Read [the research pack](../research/recon-intelligence-2026-10-22/README.md) and its architecture roadmap before the next enrichment implementation. This addendum preserves the historical main-branch checklist above; it does not mean that development work already present in open PRs must be repeated.
+
+- [x] Consolidate data sources, platform assessments, product direction, architecture and agent handoff in the repository.
+- [ ] Reconcile #7/#8 and later implementation heads, establishing the tested integrated base.
+- [ ] Add canonical identity, typed contacts and field-level evidence.
+- [ ] Measure one approved company-data source's incremental UK coverage.
+- [ ] Add cited research columns and a cost-controlled per-field contact runner.
+- [ ] Validate actual provider/data coverage privately before enabling optional paid capabilities.
+
