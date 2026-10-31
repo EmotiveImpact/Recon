@@ -187,7 +187,8 @@ class Ask:
 
     def _what(self, query, heat_query):
         if query.get("niche_word") and query["niche_word"][0] in heat_query.get("niche", []):
-            lead = query["niche_word"][0] + "s"
+            word = query["niche_word"][0]
+            lead = word if word.endswith("s") else word + "s"
         elif query.get("niche_name"):
             lead = f"businesses listed as \"{query['niche_name'][0]}\""
         elif query.get("sector"):
