@@ -15,7 +15,7 @@ Two sets of rules apply: PECR (the Privacy and Electronic Communications Regulat
 Business-to-business letters are allowed without consent, as long as we honour requests to stop. Postcards suit the sole traders.
 
 **Phone**
-Calls are allowed unless the number is on the Corporate Telephone Preference Service (CTPS) or the TPS for sole traders. Screen before any calling campaign. Recon does not do this yet. Recon tells mobiles from landlines; texting a mobile counts as electronic marketing under PECR, so a sole trader's mobile needs their consent before any text.
+Calls are allowed unless the number is on the Corporate Telephone Preference Service (CTPS) or the TPS for sole traders. Screen before any calling campaign. Recon keeps the result of each check (`python -m recon.crm screen results.csv`, or paste the results on the Today's calls page) and treats a check as good for 28 days; a number that is unchecked, stale or listed is never dialled from Recon, and a business on the do-not-contact list never appears in Today's calls. Recon tells mobiles from landlines; texting a mobile counts as electronic marketing under PECR, so a sole trader's mobile needs their consent before any text.
 
 **Seeing is not permission.** Since 13 October 2026 Recon shows every email, phone number and social link it finds, for every business, so Edem can see the full picture. A personal address (Gmail, Hotmail and so on) or a sole trader's mobile on a `post only` row is there to inform decisions, never to be emailed, texted or called without consent. `contact_rule` still decides who may be emailed.
 

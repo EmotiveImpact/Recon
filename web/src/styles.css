@@ -801,7 +801,8 @@ h3 { font-size: 14px; }
 }
 
 /* The small CRM: lists, today's calls, statuses and the outcome buttons (31 October 2026). */
-.page { display: grid; gap: 18px; align-content: start; }
+.page { display: grid; gap: 18px; align-content: start; min-width: 0; }
+.page > * { min-width: 0; }
 .page h1 { font-size: 22px; font-weight: 600; }
 .back { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
 .back:hover { color: var(--text); }
@@ -811,6 +812,8 @@ h3 { font-size: 14px; }
 .pre { white-space: pre-wrap; }
 .click { cursor: pointer; }
 tr.click:hover td { background: rgba(255, 255, 255, 0.03); }
+.list-table { table-layout: fixed; }
+.list-table td { overflow-wrap: anywhere; }
 .note-cell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 .empty-card { display: grid; justify-items: center; text-align: center; gap: 6px; padding: 44px 20px; color: var(--muted); }
 .empty-card h2 { font-size: 16px; color: var(--text); }

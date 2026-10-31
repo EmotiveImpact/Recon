@@ -207,7 +207,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
     if (!window.confirm(`Forget the niche "${n.name}"?`)) return;
     setNiches(await crm.deleteNiche(n.id));
   };
-  const chosen = tree?.sectors.find((s) => s.sector === sector);
+  const chosen = tree?.sectors?.find((s) => s.sector === sector);
   const chosenIndustry = chosen?.industries.find((i) => i.industry === industry);
   const chosenNiche = chosenIndustry?.niches.find((n) => n.niche === niche);
   const pickSector = (v: string) => { setSector(v); setIndustry(""); setNiche(""); };

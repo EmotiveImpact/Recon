@@ -197,8 +197,8 @@ function ListPage({ id }: { id: number }) {
         ))}
       </div>
       <div className="table-wrap" style={{ marginTop: 14 }}>
-        <table>
-          <thead><tr><th>Business</th><th>Where</th><th>Phone</th><th>Email</th><th>May we email?</th><th>Status</th><th>Note</th><th /></tr></thead>
+        <table className="list-table">
+          <thead><tr><th style={{ width: "24%" }}>Business</th><th style={{ width: "14%" }}>Where</th><th style={{ width: "12%" }}>Phone</th><th style={{ width: "18%" }}>Email</th><th style={{ width: "10%" }}>May we email?</th><th style={{ width: "10%" }}>Status</th><th>Note</th><th style={{ width: 40 }} /></tr></thead>
           <tbody>
             {items.map((i) => (
               <tr key={i.id} onClick={() => setOpen(i.id)} className="click">

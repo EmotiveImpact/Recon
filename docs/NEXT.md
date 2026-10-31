@@ -46,8 +46,8 @@ Things decided against, so they are not reopened without a reason: scraping Goog
 
 16. ~~**Sectors**~~: done 14 October 2026 for the UK. Every organisation sorted into 17 sectors, then industries, then niches (`python -m recon.sectors build`); the map opens on every organisation and narrows from sector to niche.
 17. **US sectors**: the same index for the United States. Left for another day (Edem, 14 October 2026). Build it a part file at a time with a memory cap, since the full UK run crashed the cloud workspace.
-18. **Lists, today's calls and do-not-contact**: the small CRM in the plan at `/mnt/project-files/plans/recon-platform-plan.md`, shaped like the prototype Edem saw on 14 October 2026.
-19. **Calling**: built into Recon on Twilio (browser calling, outcome buttons, call records), with TPS and CTPS screening first. Research and steps in `/mnt/project-files/plans/calling-platforms.md`. Waiting for Edem's go-ahead.
+18. ~~**Lists, today's calls and do-not-contact**~~: done 31 October 2026. Saved lists from the map and Find businesses, Today's calls (best prospects first, call-backs when due), outcome buttons, notes, one do-not-contact list, saved niches on the map, and TPS/CTPS screening results kept for 28 days (`python -m recon.crm`). Kept in `data/crm.sqlite`, never committed.
+19. **Calling**: prepared for VoIPstudio in `recon/calling.py` (Recon starts the call, VoIPstudio reports back by webhook, nothing dials without a clear TPS/CTPS check under 28 days old). Switched off until Edem signs up and sets the keys; the steps are on the Today's calls page. Research in `/mnt/project-files/plans/calling-platforms.md`. Still waiting for Edem's go-ahead.
 20. **Fit scores, email hand-off and signals**: the rest of the platform plan, then the link to 8BALL and ENDSTATE.
 
 Things decided against, so they are not reopened without a reason: scraping Google Maps, booking platforms or professional registers; buying lists; selling Recon as a product before it has proved itself on SALEANE.
