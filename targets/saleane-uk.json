@@ -6,11 +6,11 @@
   "sectors": {
     "Beauty and wellness": {
       "overture": [
-        "hair_salon", "beauty_salon", "nail_salon", "spas", "day_spa", "health_spa",
-        "massage", "massage_therapy", "eyelash_service", "eyebrow_service", "waxing",
-        "hair_removal", "threading_service", "skin_care", "esthetician", "facial_spa",
-        "tanning_salon", "spray_tanning", "makeup_artist", "permanent_makeup",
-        "hair_extensions", "reflexology", "float_spa", "sauna", "beauty_and_spa"
+        "hair_salon", "beauty_salon", "nail_salon", "spa", "day_spa", "health_spa",
+        "massage_therapy", "eyelash_service", "eyebrow_service", "waxing", "hair_removal",
+        "threading_service", "esthetician", "tanning_salon", "tanning_bed", "spray_tanning",
+        "makeup_artist", "permanent_makeup", "hair_stylist", "kids_hair_salon",
+        "hair_extensions", "reflexology", "float_spa", "sauna"
       ],
       "osm": [
         ["shop", "hairdresser"], ["shop", "beauty"], ["shop", "massage"],
@@ -24,15 +24,15 @@
       "sic": []
     },
     "Aesthetics": {
-      "overture": ["medical_spa", "med_spa", "laser_hair_removal", "aesthetician"],
+      "overture": [
+        "medical_spa", "aesthetic_medicine", "skin_care_and_makeup", "laser_hair_removal",
+        "tattoo_removal", "hair_replacement"
+      ],
       "osm": [],
       "sic": []
     },
     "Body and health": {
-      "overture": [
-        "physical_therapy", "physiotherapist", "chiropractor", "osteopath",
-        "osteopathic_physician", "sports_massage"
-      ],
+      "overture": ["physical_therapy", "chiropractic", "osteopathic_medicine"],
       "osm": [
         ["healthcare", "physiotherapist"], ["healthcare", "chiropractor"],
         ["healthcare", "osteopath"]
@@ -40,7 +40,7 @@
       "sic": ["86900"]
     },
     "Pet grooming": {
-      "overture": ["pet_groomer", "pet_grooming"],
+      "overture": ["pet_groomer"],
       "osm": [["shop", "pet_grooming"]],
       "sic": ["96090"]
     }

@@ -23,6 +23,8 @@ class Target:
     project: str = ""
     notes: str = ""
     box: tuple = field(default=None)
+    trade_words: dict = field(default_factory=dict)  # Optional; see recon/words.py.
+    registers: list = field(default_factory=list)  # Optional; see recon/registers.py.
 
     @classmethod
     def load(cls, path):
@@ -33,7 +35,9 @@ class Target:
         if not box:
             raise SystemExit(f"No map box known for {country}; add \"box\": [west, south, east, north]")
         return cls(name=data["name"], country=country, sectors=data["sectors"],
-                   project=data.get("project", ""), notes=data.get("notes", ""), box=box)
+                   project=data.get("project", ""), notes=data.get("notes", ""), box=box,
+                   trade_words=data.get("trade_words") or {},
+                   registers=data.get("registers") or [])
 
     def overture_categories(self):
         return sorted({c for s in self.sectors.values() for c in s.get("overture", [])})
