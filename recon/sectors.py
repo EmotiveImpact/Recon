@@ -227,7 +227,7 @@ def build(master, cache, groups=("uk", "us"), geo="data/geo", db=None):
                    {district} AS district,
                    regexp_extract_all(coalesce(category, ''), '(?:^|; )([0-9]{{5}}) - ', 1) AS codes,
                    list_filter(string_split(lower(coalesce(kind, '')), '; '),
-                               k -> k NOT IN ('', 'company', 'place', 'business',
+                               lambda k: k NOT IN ('', 'company', 'place', 'business',
                                               'business (listing site)', 'llp')) AS words,
                    can_email = 'can email' AS may,
                    coalesce(emails, '') <> '' AS email,
@@ -292,14 +292,14 @@ class Sectors:
             _, _, prefixes, words = sector_of(slug)
             pattern = "^(" + "|".join(prefixes) + ")"
             quoted = ", ".join("'" + w.replace("'", "''") + "'" for w in words)
-            parts.append(f"(len(list_filter(codes, c -> regexp_matches(c, '{pattern}'))) > 0 "
+            parts.append(f"(len(list_filter(codes, lambda c: regexp_matches(c, '{pattern}'))) > 0 "
                          f"OR list_has_any(words, [{quoted}]))")
         if industry == "other":
             parts.append("len(codes) = 0")
         elif industry:
             if not CODE.match(industry) or len(industry) != 2:
                 raise ValueError("Unknown industry")
-            parts.append(f"len(list_filter(codes, c -> c[:2] = '{industry}')) > 0")
+            parts.append(f"len(list_filter(codes, lambda c: c[:2] = '{industry}')) > 0")
         either = []
         for niche in niches:
             if CODE.match(niche) and len(niche) == 5:
@@ -344,12 +344,12 @@ class Sectors:
                 count, may = db.execute(f"SELECT count(*), count(*) FILTER (may) FROM {source}{where}").fetchone()
                 pattern = "^(" + "|".join(prefixes) + ")"
                 codes = db.execute(f"""
-                    SELECT c, count(*) FROM (SELECT unnest(list_filter(codes, c -> regexp_matches(c, '{pattern}'))) AS c
+                    SELECT c, count(*) FROM (SELECT unnest(list_filter(codes, lambda c: regexp_matches(c, '{pattern}'))) AS c
                                              FROM {source}{where})
                     GROUP BY 1 ORDER BY 2 DESC""").fetchall()
                 quoted = ", ".join("'" + w.replace("'", "''") + "'" for w in words)
                 kinds = db.execute(f"""
-                    SELECT w, count(*) FROM (SELECT unnest(list_filter(words, w -> list_contains([{quoted}], w))) AS w
+                    SELECT w, count(*) FROM (SELECT unnest(list_filter(words, lambda w: list_contains([{quoted}], w))) AS w
                                              FROM {source}{where} AND len(codes) = 0)
                     GROUP BY 1 ORDER BY 2 DESC LIMIT 30""").fetchall()
                 industries = {}
