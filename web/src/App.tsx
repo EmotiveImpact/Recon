@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowUpRight, FolderKanban, History, LayoutDashboard, Map as MapIcon, Plus, Search, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowUpRight, FolderKanban, History, LayoutDashboard, ListChecks, Map as MapIcon, PhoneCall, Plus, Search, ShieldCheck, Sparkles } from "lucide-react";
 import { api, type Project } from "./api";
 import { Toaster, useRoute } from "./ui";
 import Projects from "./pages/Projects";
@@ -11,6 +11,8 @@ import Find from "./pages/Find";
 import Dashboard from "./pages/Dashboard";
 import MapView from "./pages/MapView";
 import Ask from "./pages/Ask";
+import Lists from "./pages/Lists";
+import Calls from "./pages/Calls";
 
 const COLOURS = ["#c9ccd6", "#7fd1ae", "#8b90a0", "#d9c9a3", "#a3b4d9", "#c9a3b4"];
 export const colourFor = (i: number) => COLOURS[i % COLOURS.length];
@@ -36,11 +38,13 @@ export default function App() {
   else if (section === "find") page = <Find key={query.toString()} initial={query} />;
   else if (section === "map") page = <MapView initial={query} />;
   else if (section === "ask") page = <Ask />;
+  else if (section === "lists") page = <Lists id={id} />;
+  else if (section === "calls") page = <Calls initial={query} />;
   else page = <Dashboard />;
 
   const current = section === "p" ? id : section === "t" ? projects.find((p) => p.targets.some((t) => t.slug === id))?.slug : "";
   const title =
-    { map: "Map", find: "Find businesses", ask: "Ask Recon", projects: "Projects", runs: "Runs" }[section ?? ""] ??
+    { map: "Map", find: "Find businesses", ask: "Ask Recon", lists: "Lists", calls: "Today's calls", projects: "Projects", runs: "Runs" }[section ?? ""] ??
     (section === "p" ? projects.find((p) => p.slug === id)?.name ?? "Project" : section === "t" ? "Target list" : "Dashboard");
   const link = (href: string, on: boolean, icon: ReactNode, label: string) => (
     <a href={href} className={on ? "on" : ""}>
@@ -61,6 +65,8 @@ export default function App() {
           {link("#/ask", section === "ask", <Sparkles size={16} />, "Ask Recon")}
           <div className="nav-group">
             <div className="nav-label">Work</div>
+            {link("#/calls", section === "calls", <PhoneCall size={16} />, "Today's calls")}
+            {link("#/lists", section === "lists", <ListChecks size={16} />, "Lists")}
             {link("#/projects", section === "projects", <FolderKanban size={16} />, "All projects")}
             {link("#/runs", section === "runs", <History size={16} />, "Runs")}
           </div>

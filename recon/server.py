@@ -23,12 +23,13 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import ask, dashboard, directory, finder, places, sectors
+from . import ask, calling, crm, dashboard, directory, finder, places, sectors
 from .target import COUNTRY_BOX, Target
 
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
@@ -54,6 +55,9 @@ class Workspace:
         self.sectors = sectors.Sectors(os.path.join(self.root, "data", "sectors"))
         # Questions in plain words, answered from the sector index.
         self.ask = ask.Ask(self.sectors, lambda place: self.directory.locate("uk", place))
+        # The small CRM: saved lists, today's calls, statuses, notes, do not contact.
+        self.crm = crm.CRM(os.path.join(self.root, "data", "crm.sqlite"))
+        self.calling = calling.Calling(self.crm)
         self.projects_dir = os.path.join(self.root, "projects")
         self.targets_dir = os.path.join(self.root, "targets")
         self._results = {}  # path -> (mtime, rows)
@@ -496,11 +500,16 @@ def handler_for(workspace, site):
                 return self._api(method, parts[1:], query)
             except LookupError as error:
                 return self._json({"error": str(error).strip("'\"")}, 404)
+            except PermissionError as error:
+                return self._json({"error": str(error).strip("'\"")}, 403)
             except (ValueError, KeyError, TypeError, SystemExit) as error:
                 return self._json({"error": str(error).strip("'\"")}, 400)
 
         def _api(self, method, parts, query):
             route = (method, *parts)
+            if parts and parts[0] in ("lists", "today", "contacts", "blocked", "niches", "calls",
+                                      "screening", "crm"):
+                return self._crm(method, parts, query)
             if route == ("GET", "setup"):
                 return self._json(workspace.setup())
             if route == ("GET", "projects"):
@@ -577,9 +586,103 @@ def handler_for(workspace, site):
                                                   body.get("release")))
             return self._json({"error": "Not found"}, 404)
 
-        def _file(self, path):
+        def _crm(self, method, parts, query):
+            """The small CRM's routes. Changes need the X-Recon header like everything else,
+            apart from the calling webhook, which VoIPstudio posts with its secret key."""
+            store = workspace.crm
+            route = (method, *parts)
+            if route == ("GET", "crm"):
+                return self._json(store.summary())
+            if route == ("GET", "lists"):
+                return self._json(store.lists())
+            if route == ("POST", "lists"):
+                body = self._body()
+                list_id = store.create_list(body.get("name"), body.get("project", ""),
+                                            body.get("notes", ""), body.get("query"))
+                if body.get("items"):
+                    store.add_items(list_id, body["items"])
+                return self._json(store.get_list(list_id), 201)
+            if len(parts) >= 2 and parts[0] == "lists":
+                list_id = int(parts[1])
+                rest = tuple(parts[2:])
+                if method == "GET" and not rest:
+                    return self._json(store.get_list(list_id))
+                if method == "PUT" and not rest:
+                    body = self._body()
+                    store.update_list(list_id, body.get("name"), body.get("project"), body.get("notes"))
+                    return self._json(store.get_list(list_id))
+                if method == "DELETE" and not rest:
+                    store.delete_list(list_id)
+                    return self._json({"deleted": list_id})
+                if method == "POST" and rest == ("items",):
+                    added = store.add_items(list_id, self._body().get("items", []))
+                    return self._json({"added": added, "list": store.get_list(list_id)})
+                if method == "DELETE" and len(rest) == 2 and rest[0] == "items":
+                    store.remove_item(list_id, rest[1])
+                    return self._json({"removed": rest[1]})
+                if method == "GET" and rest == ("export",):
+                    found = store.get_list(list_id)
+                    handle, path = tempfile.mkstemp(suffix=".csv")
+                    os.close(handle)
+                    store.export_list(list_id, path)
+                    return self._file(path, slugify(found["name"]) + f"-{time.strftime('%Y-%m-%d')}.csv")
+            if route == ("GET", "today"):
+                list_id = one(query, "list")
+                return self._json(store.today_calls(int(list_id) if list_id else None,
+                                                    int(one(query, "count", "10") or 10)))
+            if len(parts) >= 2 and parts[0] == "contacts":
+                bid = parts[1]
+                rest = tuple(parts[2:])
+                if method == "GET" and not rest:
+                    return self._json(store.business(bid))
+                if method == "POST" and rest == ("log",):
+                    body = self._body()
+                    return self._json(store.log(bid, body.get("outcome", "note"), body.get("note", ""),
+                                                body.get("call_back") or None))
+                if method == "POST" and rest == ("save",):
+                    row = dict(self._body())
+                    row["id"] = bid
+                    store.save_business(row)
+                    return self._json(store.business(bid))
+            if route == ("GET", "blocked"):
+                return self._json(store.blocked())
+            if route == ("POST", "blocked"):
+                body = self._body()
+                store.block(body.get("business", ""), body.get("phone", ""), body.get("email", ""),
+                            body.get("name", ""), body.get("reason", ""))
+                return self._json(store.blocked(), 201)
+            if method == "DELETE" and len(parts) == 2 and parts[0] == "blocked":
+                store.unblock(int(parts[1]))
+                return self._json({"deleted": int(parts[1])})
+            if route == ("GET", "niches"):
+                return self._json(store.niches())
+            if route == ("POST", "niches"):
+                body = self._body()
+                store.save_niche(body.get("name"), body.get("query"), body.get("country", "uk"))
+                return self._json(store.niches(), 201)
+            if method == "DELETE" and len(parts) == 2 and parts[0] == "niches":
+                store.delete_niche(int(parts[1]))
+                return self._json(store.niches())
+            if route == ("GET", "screening"):
+                list_id = one(query, "list")
+                return self._json({"unscreened": store.unscreened(int(list_id) if list_id else None)})
+            if route == ("POST", "screening"):
+                body = self._body()
+                saved = store.record_screening(body.get("rows", []), body.get("source", "manual"))
+                return self._json({"saved": saved})
+            if route == ("GET", "calls", "setup"):
+                return self._json(workspace.calling.setup())
+            if route == ("GET", "calls", "check"):
+                return self._json({"reason": workspace.calling.check(one(query, "business"))})
+            if route == ("POST", "calls", "start"):
+                return self._json(workspace.calling.start(str(self._body().get("business", ""))), 201)
+            if route == ("POST", "calls", "webhook"):
+                return self._json(workspace.calling.webhook(self._body(), one(query, "key")))
+            raise LookupError("Not found")
+
+        def _file(self, path, name=None):
             """Send a CSV made for this request, then delete it."""
-            name = f"recon-businesses-{time.strftime('%Y-%m-%d')}.csv"
+            name = name or f"recon-businesses-{time.strftime('%Y-%m-%d')}.csv"
             try:
                 size = os.path.getsize(path)
                 self.send_response(200)
@@ -612,6 +715,9 @@ def handler_for(workspace, site):
 
         def do_PUT(self):
             self._route("PUT")
+
+        def do_DELETE(self):
+            self._route("DELETE")
 
     return Handler
 

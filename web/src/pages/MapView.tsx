@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Building2, Download, Globe, Layers, Mail, MapPin, Phone, PoundSterling, Search, SlidersHorizontal, Smartphone, X } from "lucide-react";
-import { api, type Heat, type MapResults, type MasterResults, type Row, type SectorTree } from "../api";
-import { fmt, RuleBadge, splitList } from "../ui";
+import { BookmarkPlus, Building2, Download, Globe, Layers, Mail, MapPin, Phone, PoundSterling, Search, SlidersHorizontal, Smartphone, Star, X } from "lucide-react";
+import { api, crm, type Heat, type MapResults, type MasterResults, type Row, type SavedNiche, type SectorTree } from "../api";
+import { fmt, RuleBadge, splitList, toast } from "../ui";
+import { LogOutcome, SaveToList, StatusBadge, toRow } from "../crm";
 
 // The one map: businesses near a postcode or town, as pins with the list beside them.
 // Two kinds of list can be shown:
@@ -37,6 +38,7 @@ type Item = {
   email: string; emailType: string; phone: string; mobile: string; website: string;
   company: string; companyType: string; size: string; staff: string;
   turnover: string; netAssets: string; accountsTo: string; sources: string;
+  id: string; raw: Row;
 };
 
 const tradeName = (t: string) => (t.charAt(0).toUpperCase() + t.slice(1)).replaceAll("-", " ");
@@ -64,6 +66,8 @@ function fromTrade(p: MapResults["points"][number]): Item {
     email: p.email, emailType: p.email_type, phone: p.phone, mobile: p.mobile, website: p.website,
     company: p.company_number, companyType: p.company_type, size: p.size_band, staff: p.staff,
     turnover: p.turnover, netAssets: p.net_assets, accountsTo: p.accounts_to, sources: "",
+    id: p.company_number ? `trade:${p.company_number}` : `trade:${p.name.trim().toLowerCase().replace(/\s+/g, " ")}|${(p.postcode || "").replace(/\s+/g, "").toUpperCase()}`,
+    raw: toRow({ ...p, contact_rule: p.contact_rule, country: "GB" }),
   };
 }
 
@@ -75,6 +79,7 @@ function fromRegister(r: Row): Item {
     rule: r.can_email, email: splitList(r.emails)[0] ?? "", emailType: "", phone: phones[0] ?? "", mobile: "",
     website: splitList(r.website)[0] ?? "", company: "", companyType: r.legal_form, size: "", staff: "",
     turnover: "", netAssets: "", accountsTo: "", sources: r.sources,
+    id: r.group_id, raw: toRow(r),
   };
 }
 
@@ -135,6 +140,9 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [picked, setPicked] = useState<Item | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [niches, setNiches] = useState<SavedNiche[]>([]);
+  const [status, setStatus] = useState<{ status: string; blocked: boolean | number } | null>(null);
   const mapBox = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
@@ -171,6 +179,34 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
     setTree(null);
     api.sectors(group).then(setTree, () => setTree(null));
   }, [group]);
+  useEffect(() => {
+    crm.niches().then(setNiches, () => setNiches([]));
+  }, []);
+  // The chosen business's status in the CRM, if it has been saved.
+  useEffect(() => {
+    setStatus(null);
+    if (picked?.id) crm.business(picked.id).then((b) => setStatus({ status: b.status, blocked: b.blocked }), () => setStatus(null));
+  }, [picked?.id]);
+  const queryObject = () => Object.fromEntries([...new Set([...query.keys()])].map((k) => [k, query.getAll(k)]));
+  const saveNiche = async () => {
+    const name = window.prompt("A name for this niche", [path.at(-1), near.trim() || area.replaceAll("-", " ")].filter(Boolean).join(" in "));
+    if (!name) return;
+    try {
+      setNiches(await crm.saveNiche(name, queryObject(), group));
+      toast(`Saved the niche ${name}`);
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
+  const openNiche = (n: SavedNiche) => {
+    const p = new URLSearchParams(Object.entries(n.query).flatMap(([k, v]) => v.map((x) => [k, x])));
+    window.location.hash = `#/map?${p}`;
+    window.location.reload();
+  };
+  const dropNiche = async (n: SavedNiche) => {
+    if (!window.confirm(`Forget the niche "${n.name}"?`)) return;
+    setNiches(await crm.deleteNiche(n.id));
+  };
   const chosen = tree?.sectors.find((s) => s.sector === sector);
   const chosenIndustry = chosen?.industries.find((i) => i.industry === industry);
   const chosenNiche = chosenIndustry?.niches.find((n) => n.niche === niche);
@@ -423,6 +459,16 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
               )}
             </div>
           )}
+          {source === "all" && (sector || niches.length > 0) && (
+            <div className="niche-chips">
+              {sector && <button onClick={saveNiche} title="Save this sector, place and filters as a niche"><Star size={11} /> Save niche</button>}
+              {niches.filter((n) => n.country === group).map((n) => (
+                <button key={n.id} onClick={() => openNiche(n)} title={Object.entries(n.query).map(([k, v]) => `${k}: ${v.join(", ")}`).join("\n")}>
+                  <Star size={11} /> {n.name} <span className="x" onClick={(e) => { e.stopPropagation(); dropNiche(n); }}><X size={10} /></span>
+                </button>
+              ))}
+            </div>
+          )}
           {more && (
             <div className="hud-more">
               {source === "trades" && (
@@ -511,7 +557,10 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
             <section className="hud-panel hud-list">
               <div className="spread">
                 <h3 className="hud-h">{view.items.length < view.mapped ? `Nearest ${fmt(view.items.length)}` : "The list"}</h3>
-                <a className="btn small ghost" href={exportUrl}><Download size={13} /> Download</a>
+                <span className="hud-save">
+                  <button className="btn small ghost" onClick={() => setSaving(true)} disabled={!view.items.length} title="Save these businesses as a list"><BookmarkPlus size={13} /> Save as list</button>
+                  <a className="btn small ghost" href={exportUrl}><Download size={13} /> Download</a>
+                </span>
               </div>
               <div className="map-list">
                 {view.items.map((i, n) => (
@@ -550,7 +599,10 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
                 </div>
                 <button className="btn ghost small" onClick={() => setPicked(null)} aria-label="Close"><X size={14} /></button>
               </div>
-              <RuleBadge rule={picked.rule} />
+              <div className="row" style={{ gap: 6 }}>
+                <RuleBadge rule={picked.rule} />
+                {status && <StatusBadge status={status.status} blocked={status.blocked} />}
+              </div>
               <dl className="kv">
                 <dt>Address</dt><dd>{[picked.address, picked.town, picked.postcode].filter(Boolean).join(", ") || "Not known"}</dd>
                 {picked.email && (<><dt>Email</dt><dd>{picked.email} <span className="faint small">{picked.emailType}</span></dd></>)}
@@ -563,6 +615,7 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
                 {picked.turnover && (<><dt>Turnover</dt><dd>{money(picked.turnover)}</dd></>)}
                 {picked.sources && (<><dt>Found in</dt><dd className="small">{picked.sources.split(";").map((s) => s.trim()).filter(Boolean).join(", ")}</dd></>)}
               </dl>
+              <PickedActions item={picked} onChanged={(st) => setStatus(st)} />
             </section>
           ) : (
             <section className="hud-panel hud-hint">
@@ -640,6 +693,11 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
         </div>
       )}
 
+      {saving && view && (
+        <SaveToList rows={view.items.map((i) => i.raw)} query={queryObject()}
+          title={[path.at(-1) || q.trim() || (source === "trades" ? (trades[0] ? tradeName(trades[0]) : "Trades") : ""), place].filter(Boolean).join(" in ")}
+          onClose={() => setSaving(false)} />
+      )}
       {view && !needsMore && (
         <div className="hud-bottom">
           {[["", "Everyone", "#e5e7eb"], ["can email", "Can email", GREEN], ["post only", "Post only", AMBER]].map(([v, label, colour]) => (
@@ -649,6 +707,23 @@ export default function MapView({ initial }: { initial: URLSearchParams }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// Under the chosen business on the map: add it to a list, and log what happened.
+function PickedActions({ item, onChanged }: { item: Item; onChanged: (s: { status: string; blocked: boolean | number }) => void }) {
+  const [saving, setSaving] = useState(false);
+  const [logging, setLogging] = useState(false);
+  const ensureSaved = () => crm.save(item.id, item.raw);
+  return (
+    <div className="hud-actions">
+      <div className="row" style={{ gap: 6 }}>
+        <button className="btn small" onClick={() => setSaving(true)}><BookmarkPlus size={13} /> Add to a list</button>
+        <button className="btn small ghost" onClick={async () => { await ensureSaved(); setLogging(!logging); }}>{logging ? "Hide" : "Log a call or note"}</button>
+      </div>
+      {logging && <LogOutcome business={item.id} compact onLogged={(b) => onChanged({ status: b.status, blocked: b.blocked })} />}
+      {saving && <SaveToList rows={[item.raw]} title="" onClose={() => setSaving(false)} />}
     </div>
   );
 }

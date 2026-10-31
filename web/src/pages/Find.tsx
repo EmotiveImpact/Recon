@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Database, Download, ExternalLink, Globe, Mail, Map as MapIcon, MapPin, Navigation, Phone, Search, User, X } from "lucide-react";
+import { BookmarkPlus, Database, Download, ExternalLink, Globe, Mail, Map as MapIcon, MapPin, Navigation, Phone, Search, User, X } from "lucide-react";
 import { api, type MasterResults, type MasterStatus, type Row } from "../api";
 import { fmt, pct, RuleBadge, splitList } from "../ui";
+import { SaveToList } from "../crm";
 
 // Ready-made searches. Commas mean "or"; words are matched on their stem,
 // so "plumbers" also finds "plumbing".
@@ -153,6 +154,7 @@ export default function Find({ initial }: { initial?: URLSearchParams }) {
   const [error, setError] = useState("");
   const [open, setOpen] = useState<Row | null>(null);
   const [showSources, setShowSources] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     api.master().then(setStatus, (e) => setError(e.message));
@@ -376,9 +378,16 @@ export default function Find({ initial }: { initial?: URLSearchParams }) {
                 </div>
               )}
               <div style={{ flex: 1 }} />
+              <button className="btn" onClick={() => setSaving(true)} disabled={!data.rows.length} title="Save this page of results as a list">
+                <BookmarkPlus size={15} /> Save as list
+              </button>
               <a className="btn primary" href={api.masterExportUrl(query)}>
                 <Download size={15} /> Download {fmt(Math.min(data.total, 1000000))} as a spreadsheet
               </a>
+              {saving && (
+                <SaveToList rows={data.rows} query={Object.fromEntries([...new Set([...query.keys()])].map((k) => [k, query.getAll(k)]))}
+                  title={[q.trim(), near.trim() || town.trim()].filter(Boolean).join(" in ")} onClose={() => setSaving(false)} />
+              )}
             </div>
           </div>
 

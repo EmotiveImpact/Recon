@@ -218,3 +218,58 @@ export const api = {
   categories: (country: string, words: string[]) =>
     call<{ category: string; places: number }[]>("POST", "categories", { country, words }),
 };
+
+// The small CRM: saved lists, today's calls, a status and notes for each business.
+export type SavedList = {
+  id: number; name: string; project: string; notes: string; query: Record<string, string[]>;
+  created: string; updated: string; businesses: number; contacted: number; with_phone: number; may_email: number;
+};
+export type Saved = {
+  id: string; name: string; kind: string; address: string; town: string; postcode: string;
+  phone: string; mobile: string; email: string; website: string; rule: string; sources: string; country: string;
+  lat: string; lon: string; updated: string;
+  status: string; note: string; call_back: string | null; status_updated?: string | null; blocked: number | boolean;
+};
+export type ListDetail = Omit<SavedList, "businesses" | "contacted" | "with_phone" | "may_email"> & { items: (Saved & { added: string })[] };
+export type Activity = { id: number; at: string; kind: string; outcome: string; note: string; seconds: number | null; recording: string; call_id: string };
+export type Business = Saved & { history: Activity[]; lists: { id: number; name: string }[]; screening: string };
+export type Call = Saved & { dial: string; mobile_number: boolean; screening: string; why: string; calls: number; last_call: string | null; lists: string };
+export type Blocked = { id: number; business: string; phone: string; email: string; name: string; reason: string; at: string };
+export type SavedNiche = { id: number; name: string; country: string; query: Record<string, string[]>; created: string };
+export type CallingSetup = {
+  provider: string; configured: boolean; missing: string[]; webhook_protected: boolean; caller_id: string;
+  unscreened: number; steps: string[];
+};
+export type CrmSummary = {
+  lists: number; businesses: number; contacted: number; interested: number; customers: number;
+  call_backs_due: number; do_not_contact: number; calls_today: number; niches: number;
+};
+
+export const crm = {
+  summary: () => call<CrmSummary>("GET", "crm"),
+  lists: () => call<SavedList[]>("GET", "lists"),
+  list: (id: number) => call<ListDetail>("GET", `lists/${id}`),
+  createList: (body: { name: string; project?: string; notes?: string; query?: Record<string, string[]>; items?: Row[] }) =>
+    call<ListDetail>("POST", "lists", body),
+  updateList: (id: number, body: { name?: string; project?: string; notes?: string }) => call<ListDetail>("PUT", `lists/${id}`, body),
+  deleteList: (id: number) => call<{ deleted: number }>("DELETE", `lists/${id}`),
+  addItems: (id: number, items: Row[]) => call<{ added: number; list: ListDetail }>("POST", `lists/${id}/items`, { items }),
+  removeItem: (id: number, business: string) => call<{ removed: string }>("DELETE", `lists/${id}/items/${encodeURIComponent(business)}`),
+  exportUrl: (id: number) => `/api/lists/${id}/export`,
+  today: (list: number | null, count = 10) => call<Call[]>("GET", `today?count=${count}${list ? `&list=${list}` : ""}`),
+  business: (id: string) => call<Business>("GET", `contacts/${encodeURIComponent(id)}`),
+  save: (id: string, row: Row) => call<Business>("POST", `contacts/${encodeURIComponent(id)}/save`, row),
+  log: (id: string, body: { outcome: string; note?: string; call_back?: string }) =>
+    call<Business>("POST", `contacts/${encodeURIComponent(id)}/log`, body),
+  blocked: () => call<Blocked[]>("GET", "blocked"),
+  block: (body: { business?: string; phone?: string; email?: string; name?: string; reason?: string }) => call<Blocked[]>("POST", "blocked", body),
+  unblock: (id: number) => call<{ deleted: number }>("DELETE", `blocked/${id}`),
+  niches: () => call<SavedNiche[]>("GET", "niches"),
+  saveNiche: (name: string, query: Record<string, string[]>, country: string) => call<SavedNiche[]>("POST", "niches", { name, query, country }),
+  deleteNiche: (id: number) => call<SavedNiche[]>("DELETE", `niches/${id}`),
+  screening: (list: number | null) => call<{ unscreened: string[] }>("GET", `screening${list ? `?list=${list}` : ""}`),
+  recordScreening: (rows: { phone: string; result: string }[], source: string) => call<{ saved: number }>("POST", "screening", { rows, source }),
+  callingSetup: () => call<CallingSetup>("GET", "calls/setup"),
+  callCheck: (business: string) => call<{ reason: string }>("GET", `calls/check?business=${encodeURIComponent(business)}`),
+  startCall: (business: string) => call<{ call_id: string; to: string; business: string }>("POST", "calls/start", { business }),
+};

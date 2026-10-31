@@ -799,3 +799,73 @@ h3 { font-size: 14px; }
   .side .nav { flex-direction: row; overflow-x: auto; flex: 1; }
   .side-foot { display: none; }
 }
+
+/* The small CRM: lists, today's calls, statuses and the outcome buttons (31 October 2026). */
+.page { display: grid; gap: 18px; align-content: start; }
+.page h1 { font-size: 22px; font-weight: 600; }
+.back { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.back:hover { color: var(--text); }
+.field { display: grid; gap: 6px; margin-top: 12px; }
+.field label { font-size: 12.5px; color: var(--muted); }
+.link { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
+.pre { white-space: pre-wrap; }
+.click { cursor: pointer; }
+tr.click:hover td { background: rgba(255, 255, 255, 0.03); }
+.note-cell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.empty-card { display: grid; justify-items: center; text-align: center; gap: 6px; padding: 44px 20px; color: var(--muted); }
+.empty-card h2 { font-size: 16px; color: var(--text); }
+.empty-card svg { color: var(--faint); margin-bottom: 6px; }
+.empty-card a { text-decoration: underline; text-underline-offset: 2px; }
+.list-card { display: grid; gap: 12px; }
+.list-card h2 { font-size: 15.5px; }
+.list-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.list-nums b { display: block; font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.list-nums span { font-size: 11.5px; color: var(--faint); }
+.progress { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+.progress i { display: block; height: 100%; background: #c9ccd6; }
+.outcomes { display: grid; gap: 8px; }
+.outcome-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.outcomes.compact .outcome-grid { grid-template-columns: repeat(2, 1fr); }
+.outcome { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border-radius: 8px; font-size: 12.5px;
+  border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(255, 255, 255, 0.03); color: var(--muted); cursor: pointer; white-space: nowrap; overflow: hidden; }
+.outcome svg { flex: none; color: var(--faint); }
+.outcome span { overflow: hidden; text-overflow: ellipsis; }
+.outcome:hover { color: var(--text); border-color: rgba(255, 255, 255, 0.2); }
+.outcome.busy { opacity: 0.5; }
+.outcome.interested:hover, .outcome.customer:hover { color: var(--green); border-color: rgba(52, 211, 153, 0.4); }
+.outcome.not-interested:hover, .outcome.do-not-contact:hover { color: var(--red); border-color: rgba(248, 113, 113, 0.4); }
+.outcome.call-back:hover { color: var(--blue); border-color: rgba(96, 165, 250, 0.4); }
+.biz { display: grid; gap: 14px; margin-top: 12px; }
+.history { display: grid; gap: 4px; }
+.history-row { display: grid; grid-template-columns: 110px 120px 1fr; gap: 10px; align-items: start; font-size: 13px; padding: 5px 0; border-top: 1px solid rgba(255, 255, 255, 0.05); }
+.calls-grid { display: grid; grid-template-columns: 280px minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+.calls-queue, .calls-main, .calls-side .card { display: grid; gap: 12px; }
+.calls-side { display: grid; gap: 16px; }
+.calls-side h3 { display: flex; align-items: center; gap: 6px; }
+.queue { display: grid; gap: 2px; }
+.queue-item { display: flex; gap: 10px; align-items: center; text-align: left; padding: 8px 10px; border-radius: 8px; border: 1px solid transparent; background: none; cursor: pointer; }
+.queue-item:hover { background: var(--panel); }
+.queue-item.on { background: var(--panel-2); border-color: var(--line-2); }
+.queue-item .n { width: 20px; font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.queue-item .body { display: grid; min-width: 0; flex: 1; }
+.queue-item .body b { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue-item .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--faint); }
+.queue-item .dot.clear { background: var(--green); }
+.queue-item .dot.tps, .queue-item .dot.ctps { background: var(--red); }
+.queue-item .dot.unknown, .queue-item .dot.stale { background: var(--amber); }
+.dial { display: grid; gap: 10px; padding: 14px 16px; border-radius: 12px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--line); }
+.dial-number { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dial-number b { font-size: 22px; font-weight: 600; letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
+.notice.small { padding: 8px 10px; }
+.why { display: grid; gap: 4px; font-size: 13.5px; }
+.why .chip { cursor: default; }
+.past-note { font-size: 13.5px; color: var(--muted); }
+.steps { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--muted); }
+.hud-save { display: flex; gap: 6px; }
+.niche-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.niche-chips button { display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(255, 255, 255, 0.04);
+  color: var(--muted); border-radius: 999px; padding: 3px 9px; font-size: 11.5px; cursor: pointer; max-width: 100%; }
+.niche-chips button:hover { color: var(--text); border-color: rgba(255, 255, 255, 0.25); }
+.niche-chips button .x { opacity: 0.5; margin-left: 2px; }
+.niche-chips button .x:hover { opacity: 1; color: var(--red); }
+@media (max-width: 1100px) { .calls-grid { grid-template-columns: minmax(0, 1fr); } .outcome-grid { grid-template-columns: repeat(2, 1fr); } }
